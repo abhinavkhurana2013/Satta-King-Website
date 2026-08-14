@@ -1,0 +1,6 @@
+{
+  "name": "Satta King",
+  "description": "Public Satta King website displaying live market results and record charts from shared Supabase database.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
