@@ -146,16 +146,9 @@ export async function initApp() {
     }
 
     // Re-render affected cards with updated sorting
-    applyFilterAndRender();
+    applyFilterAndRender(true);
     updateActiveMarketsCount();
   });
-
-  // Automatic lightweight ticker to re-sort markets continuously as 20-min thresholds pass
-  setInterval(() => {
-    if (!isLoading && allMarkets.length > 0) {
-      applyFilterAndRender();
-    }
-  }, 10000);
 
   // Initial data load
   await loadMarketsData(true);
@@ -305,6 +298,41 @@ function sortMarketsByUpcoming(markets) {
   ];
 }
 
+// ----------------------------------------------------
+// Google AdSense Unit Helper Functions
+// ----------------------------------------------------
+function createAdSenseCard() {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'adsense-card-container w-full my-3 sm:my-4 flex justify-center items-center overflow-hidden min-h-[50px] transition-all';
+  
+  const ins = document.createElement('ins');
+  ins.className = 'adsbygoogle';
+  ins.style.display = 'block';
+  ins.style.width = '100%';
+  ins.setAttribute('data-ad-format', 'fluid');
+  ins.setAttribute('data-ad-layout-key', '-fb+5w+4e-db+86');
+  ins.setAttribute('data-ad-client', 'ca-pub-2724281909345498');
+  ins.setAttribute('data-ad-slot', '9637062261');
+  
+  wrapper.appendChild(ins);
+  return wrapper;
+}
+
+function initializeAdSenseUnits(scope = document) {
+  try {
+    const uninitialized = scope.querySelectorAll('ins.adsbygoogle:not([data-adsbygoogle-status])');
+    uninitialized.forEach(() => {
+      try {
+        (window.adsbygoogle = window.adsbygoogle || []).push({});
+      } catch (pushErr) {
+        console.debug('AdSense push notice:', pushErr);
+      }
+    });
+  } catch (err) {
+    console.debug('AdSense init notice:', err);
+  }
+}
+
 // Render 🔥 Active Market Section
 function renderActiveMarketCard(market, dateResultsMap, prevDateResultsMap) {
   const wrapper = document.getElementById('active-market-wrapper');
@@ -370,7 +398,7 @@ function renderActiveMarketCard(market, dateResultsMap, prevDateResultsMap) {
               🔥 Active Market
             </span>
           </div>
-          <span class="text-[10px] font-black text-amber-300 bg-amber-950/80 px-2.5 py-0.5 rounded-md border border-amber-500/40 shadow-xs">
+          <span id="active-market-time-badge" class="text-[10px] font-black text-amber-300 bg-amber-950/80 px-2.5 py-0.5 rounded-md border border-amber-500/40 shadow-xs">
             ⏱️ ${timeText}
           </span>
         </div>
@@ -421,6 +449,10 @@ function renderActiveMarketCard(market, dateResultsMap, prevDateResultsMap) {
     </div>
   `;
 
+  // Append Google AdSense Ad directly below Active Market Card
+  const adCard = createAdSenseCard();
+  wrapper.appendChild(adCard);
+
   const chartBtn = wrapper.querySelector('.active-record-chart-btn');
   if (chartBtn) {
     chartBtn.addEventListener('click', (e) => {
@@ -428,10 +460,16 @@ function renderActiveMarketCard(market, dateResultsMap, prevDateResultsMap) {
       openRecordChartModal(market);
     });
   }
+
+  // Initialize AdSense unit for the active market card
+  initializeAdSenseUnits(wrapper);
 }
 
+// Cache last rendered snapshot to prevent unnecessary DOM rebuilds & AdSense re-inits
+let lastRenderedSnapshot = '';
+
 // Filter & Sort markets based on status, upcoming time & search query
-async function applyFilterAndRender() {
+async function applyFilterAndRender(force = false) {
   const query = currentSearchQuery.trim().toLowerCase();
 
   // Ensure date picker value matches selectedUserDateIso
@@ -475,6 +513,45 @@ async function applyFilterAndRender() {
       upcomingMarkets = sortedMarkets.slice(1);
     }
   }
+
+  // Generate current render snapshot
+  const currentSnapshot = JSON.stringify({
+    query,
+    date: selectedUserDateIso,
+    order: sortedMarkets.map(m => m.id),
+    res: sortedMarkets.map(m => [
+      m.id,
+      m.today_number,
+      m.yesterday_number,
+      m.first_number,
+      m.second_number,
+      dateResultsMap ? dateResultsMap.get(m.market_name) : null,
+      prevDateResultsMap ? prevDateResultsMap.get(m.market_name) : null
+    ])
+  });
+
+  // If nothing changed structurally or in data, only update active market countdown badge without tearing down AdSense ads
+  if (!force && currentSnapshot === lastRenderedSnapshot) {
+    if (activeMarket) {
+      const { istMinutes } = getISTDateTime();
+      const timeStatus = getMarketTimeStatus(activeMarket.draw_time, istMinutes);
+      let timeText = '';
+      if (timeStatus.timeSinceDraw === 0 || timeStatus.timeSinceDraw < 20) {
+        timeText = 'Drawing Now!';
+      } else if (timeStatus.timeUntilDraw < 60) {
+        timeText = `In ${timeStatus.timeUntilDraw} min${timeStatus.timeUntilDraw === 1 ? '' : 's'}`;
+      } else {
+        const hrs = Math.floor(timeStatus.timeUntilDraw / 60);
+        const mins = timeStatus.timeUntilDraw % 60;
+        timeText = `In ${hrs}h ${mins}m`;
+      }
+      const timeBadge = document.getElementById('active-market-time-badge');
+      if (timeBadge) timeBadge.textContent = `⏱️ ${timeText}`;
+    }
+    return;
+  }
+
+  lastRenderedSnapshot = currentSnapshot;
 
   // Render top active market section
   renderActiveMarketCard(activeMarket, dateResultsMap, prevDateResultsMap);
@@ -540,7 +617,7 @@ function renderMarketCards(markets, dateResultsMap, prevDateResultsMap) {
 
     const headerTextClass = 'text-xl font-black text-slate-900';
 
-    card.className = `market-card ${cardBgClass} rounded-2xl p-4 sm:p-5 transition-all duration-200 relative overflow-hidden shadow-xs hover:shadow-md mb-3 sm:mb-4`;
+    card.className = `market-card ${cardBgClass} rounded-2xl p-4 sm:p-5 transition-all duration-200 relative overflow-hidden shadow-xs hover:shadow-md`;
     card.style.animationDelay = `${index * 40}ms`;
 
     // Result for selectedUserDateIso
@@ -624,6 +701,10 @@ function renderMarketCards(markets, dateResultsMap, prevDateResultsMap) {
     `;
 
     container.appendChild(card);
+
+    // Append Google AdSense Ad directly below each Market Card
+    const adCard = createAdSenseCard();
+    container.appendChild(adCard);
   });
 
   // Attach record chart link listeners
@@ -638,6 +719,9 @@ function renderMarketCards(markets, dateResultsMap, prevDateResultsMap) {
       }
     });
   });
+
+  // Initialize all newly rendered AdSense units in the container
+  initializeAdSenseUnits(container);
 }
 
 // Render Skeleton Loading Placeholders
