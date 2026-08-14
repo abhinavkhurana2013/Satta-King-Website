@@ -752,6 +752,7 @@ function renderSkeletonLoaders() {
 function setupSearch() {
   const searchInput = document.getElementById('market-search-input');
   const clearBtn = document.getElementById('clear-search-btn');
+  const searchSubmitBtn = document.getElementById('search-submit-btn');
 
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
@@ -763,16 +764,34 @@ function setupSearch() {
           clearBtn.classList.add('hidden');
         }
       }
-      applyFilterAndRender();
+      applyFilterAndRender(true);
+    });
+
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        currentSearchQuery = searchInput.value;
+        applyFilterAndRender(true);
+      }
+    });
+  }
+
+  if (searchSubmitBtn && searchInput) {
+    searchSubmitBtn.addEventListener('click', () => {
+      currentSearchQuery = searchInput.value;
+      applyFilterAndRender(true);
+      searchInput.focus();
     });
   }
 
   if (clearBtn) {
     clearBtn.addEventListener('click', () => {
       currentSearchQuery = '';
-      if (searchInput) searchInput.value = '';
+      if (searchInput) {
+        searchInput.value = '';
+        searchInput.focus();
+      }
       clearBtn.classList.add('hidden');
-      applyFilterAndRender();
+      applyFilterAndRender(true);
     });
   }
 
@@ -782,7 +801,7 @@ function setupSearch() {
       currentSearchQuery = '';
       if (searchInput) searchInput.value = '';
       if (clearBtn) clearBtn.classList.add('hidden');
-      applyFilterAndRender();
+      applyFilterAndRender(true);
     });
   }
 }
