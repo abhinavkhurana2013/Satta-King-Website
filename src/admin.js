@@ -6,6 +6,7 @@ import {
   updateMarket,
   deleteMarket,
   saveDailyResultRecord,
+  clearAllHistoricalAndMonthlyResults,
   getTodayIsoDateStr,
   getYesterdayIsoDateStr,
   getISTDateTime,
@@ -125,6 +126,12 @@ function setupEventListeners() {
   const copySqlBtn = document.getElementById('copy-sql-btn');
   if (copySqlBtn) {
     copySqlBtn.addEventListener('click', copySqlToClipboard);
+  }
+
+  // Reset Monthly Results button
+  const resetMonthlyBtn = document.getElementById('reset-monthly-results-btn');
+  if (resetMonthlyBtn) {
+    resetMonthlyBtn.addEventListener('click', handleResetMonthlyResults);
   }
 
 
@@ -731,6 +738,23 @@ function handleConfigSave(e) {
   }
 }
 
+async function handleResetMonthlyResults() {
+  const confirmed = confirm('⚠️ Are you sure you want to RESET & CLEAR all market monthly/historical results from the database?\n\nThis will empty the "all_results" and "daily_results" tables in Supabase and clear local cache.');
+  if (!confirmed) return;
+
+  try {
+    notify('Resetting market monthly results in database...', 'info');
+    await clearAllHistoricalAndMonthlyResults(false);
+    notify('✅ All market monthly results have been reset in the database!', 'success');
+    if (onMarketsUpdatedCallback) {
+      onMarketsUpdatedCallback();
+    }
+  } catch (err) {
+    console.error('Failed to reset monthly results:', err);
+    notify('Failed to reset monthly results: ' + (err.message || err), 'error');
+  }
+}
+
 function copySqlToClipboard() {
   const sqlText = `-- ========================================================
 -- SATTA KING RESULTS SUPABASE DATABASE SCHEMA & IST CRON SHIFT
@@ -760,7 +784,19 @@ ALTER TABLE results ADD COLUMN IF NOT EXISTS first_number INT DEFAULT NULL;
 ALTER TABLE results ADD COLUMN IF NOT EXISTS second_number INT DEFAULT NULL;
 ALTER TABLE results ADD COLUMN IF NOT EXISTS last_shifted_date DATE DEFAULT NULL;
 
--- 2. Create 'daily_results' table for record chart history
+-- 2. Create 'all_results' and 'daily_results' table for record chart history
+CREATE TABLE IF NOT EXISTS all_results (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  market_id UUID DEFAULT NULL,
+  market_name TEXT NOT NULL,
+  result_date DATE NOT NULL,
+  result TEXT NOT NULL,
+  result_number TEXT DEFAULT NULL,
+  draw_time TEXT DEFAULT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS daily_results (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   market_name TEXT NOT NULL,
@@ -773,10 +809,14 @@ CREATE TABLE IF NOT EXISTS daily_results (
 
 -- 3. Enable RLS and public policies
 ALTER TABLE results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE all_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_results ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow Public Access" ON results;
 CREATE POLICY "Allow Public Access" ON results FOR ALL TO public USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow Public Access All Results" ON all_results;
+CREATE POLICY "Allow Public Access All Results" ON all_results FOR ALL TO public USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow Public Access Daily" ON daily_results;
 CREATE POLICY "Allow Public Access Daily" ON daily_results FOR ALL TO public USING (true) WITH CHECK (true);
@@ -789,6 +829,12 @@ BEGIN
     WHERE pubname = 'supabase_realtime' AND tablename = 'results'
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE results;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'all_results'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE all_results;
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_publication_tables 

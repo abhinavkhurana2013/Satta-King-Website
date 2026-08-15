@@ -1064,6 +1064,49 @@ export async function executeAutoShiftIST(allMarkets) {
 }
 
 /**
+ * Fetch all historical records from Supabase public.all_results table
+ */
+export async function fetchAllResults() {
+  if (isSupabaseConfigured()) {
+    if (!supabaseClient) initSupabaseClient();
+    if (supabaseClient) {
+      try {
+        const { data, error } = await supabaseClient
+          .from('all_results')
+          .select('*')
+          .order('result_date', { ascending: false });
+
+        console.log('ALL RESULTS FROM SUPABASE:', data);
+        console.log('ALL RESULTS ERROR:', error);
+
+        if (error) {
+          console.error('ALL_RESULTS READ ERROR:', error);
+        } else if (data && Array.isArray(data)) {
+          return data;
+        }
+      } catch (err) {
+        console.error('ALL_RESULTS READ ERROR:', err);
+      }
+    }
+  }
+
+  // Fallback to local storage history
+  try {
+    const rawLocal = localStorage.getItem(LOCAL_HISTORY_KEY);
+    if (rawLocal) {
+      const localList = JSON.parse(rawLocal);
+      if (Array.isArray(localList)) {
+        return localList;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to parse local history:', e);
+  }
+
+  return [];
+}
+
+/**
  * Fetch full historical records for a market and month (YYYY-MM or "ALL") from Supabase public.all_results table
  * Loads complete history, preserving exact text format (e.g., "00", "09", "60") and exact dates without timezone conversion.
  */
@@ -1079,87 +1122,55 @@ export async function fetchMarketHistory(marketName, yearMonth = 'ALL', marketId
     if (!supabaseClient) initSupabaseClient();
     if (supabaseClient) {
       try {
-        let query = supabaseClient
+        const { data, error } = await supabaseClient
           .from('all_results')
           .select('*')
           .order('result_date', { ascending: false });
 
-        if (marketId && marketName) {
-          query = query.or(`market_id.eq.${marketId},market_name.eq.${marketName}`);
-        } else if (marketId) {
-          query = query.eq('market_id', marketId);
-        } else if (marketName) {
-          query = query.eq('market_name', marketName);
-        }
+        console.log('ALL RESULTS FROM SUPABASE:', data);
+        console.log('ALL RESULTS ERROR:', error);
 
-        if (yearMonth !== 'ALL') {
-          const startDate = `${yearMonth}-01`;
-          const [y, m] = yearMonth.split('-').map(Number);
-          const lastDay = new Date(y, m, 0).getDate();
-          const endDate = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
-          query = query.gte('result_date', startDate).lte('result_date', endDate);
-        }
+        if (error) {
+          console.error('ALL_RESULTS READ ERROR:', error);
+        } else if (data && Array.isArray(data)) {
+          const marketHistory = data
+            .filter(row => {
+              if (!row) return false;
+              // Primary key match: market.id === row.market_id
+              const idMatch = (marketId !== null && marketId !== undefined && row.market_id !== null && row.market_id !== undefined && String(row.market_id) === String(marketId));
+              // Fallback match by market_name if market_id is null/missing
+              const nameMatch = (marketName && row.market_name && row.market_name.trim().toLowerCase() === marketName.trim().toLowerCase());
+              return idMatch || nameMatch;
+            })
+            .sort((a, b) => {
+              const dateA = extractIsoDate(a.result_date) || String(a.result_date);
+              const dateB = extractIsoDate(b.result_date) || String(b.result_date);
+              return dateA.localeCompare(dateB);
+            });
 
-        const { data, error } = await query;
-        if (!error && data && Array.isArray(data)) {
-          data.forEach(item => {
+          console.log('MARKET HISTORY:', marketHistory);
+
+          marketHistory.forEach(item => {
             const normDate = extractIsoDate(item.result_date);
             const rawRes = (item.result !== undefined && item.result !== null) ? item.result : item.result_number;
             const resStr = extractResultString(rawRes);
             if (normDate && resStr) {
-              historyMap.set(normDate, {
-                id: item.id,
-                market_id: item.market_id,
-                market_name: item.market_name || marketName,
-                result_date: normDate,
-                result: resStr,
-                result_number: resStr
-              });
+              if (yearMonth === 'ALL' || normDate.startsWith(yearMonth)) {
+                historyMap.set(normDate, {
+                  id: item.id,
+                  market_id: item.market_id,
+                  market_name: item.market_name || marketName,
+                  result_date: normDate,
+                  result: resStr,
+                  result_number: resStr,
+                  draw_time: item.draw_time
+                });
+              }
             }
           });
-        } else if (error) {
-          console.warn('[Supabase all_results fetch warning, checking fallback]:', error.message);
-          // Fallback to daily_results
-          try {
-            let fbQuery = supabaseClient
-              .from('daily_results')
-              .select('*')
-              .order('result_date', { ascending: false });
-
-            if (marketName) {
-              fbQuery = fbQuery.eq('market_name', marketName);
-            }
-            if (yearMonth !== 'ALL') {
-              const startDate = `${yearMonth}-01`;
-              const [y, m] = yearMonth.split('-').map(Number);
-              const lastDay = new Date(y, m, 0).getDate();
-              const endDate = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
-              fbQuery = fbQuery.gte('result_date', startDate).lte('result_date', endDate);
-            }
-
-            const fbRes = await fbQuery;
-            if (!fbRes.error && fbRes.data && Array.isArray(fbRes.data)) {
-              fbRes.data.forEach(item => {
-                const normDate = extractIsoDate(item.result_date);
-                const rawRes = (item.result !== undefined && item.result !== null) ? item.result : item.result_number;
-                const resStr = extractResultString(rawRes);
-                if (normDate && resStr && !historyMap.has(normDate)) {
-                  historyMap.set(normDate, {
-                    id: item.id,
-                    market_name: item.market_name || marketName,
-                    result_date: normDate,
-                    result: resStr,
-                    result_number: resStr
-                  });
-                }
-              });
-            }
-          } catch (e) {
-            // ignore
-          }
         }
       } catch (err) {
-        console.warn('History fetch exception from Supabase:', err);
+        console.error('ALL_RESULTS READ ERROR (EXCEPTION):', err);
       }
     }
   }
@@ -1173,12 +1184,14 @@ export async function fetchMarketHistory(marketName, yearMonth = 'ALL', marketId
         localList.forEach(item => {
           const normDate = extractIsoDate(item.result_date);
           if (normDate && (yearMonth === 'ALL' || normDate.startsWith(yearMonth))) {
-            const matchesMarket = (!marketName || item.market_name === marketName) || (marketId && item.market_id === marketId);
+            const matchesMarket = (marketId && item.market_id && String(item.market_id) === String(marketId)) ||
+                                  (!marketName || (item.market_name && item.market_name.trim().toLowerCase() === marketName.trim().toLowerCase()));
             if (matchesMarket) {
               const rawRes = (item.result !== undefined && item.result !== null) ? item.result : item.result_number;
               const resStr = extractResultString(rawRes);
               if (resStr && !historyMap.has(normDate)) {
                 historyMap.set(normDate, {
+                  market_id: item.market_id,
                   market_name: item.market_name || marketName,
                   result_date: normDate,
                   result: resStr,
@@ -1296,6 +1309,86 @@ export async function saveDailyResultRecord(marketName, resultDate, resultNumber
       }
     }
   }
+}
+
+/**
+ * Reset / Clear all website market monthly results from Supabase database tables
+ * (all_results, daily_results, and local storage cache)
+ */
+export async function clearAllHistoricalAndMonthlyResults(resetMarketCurrentNumbers = false) {
+  const results = {
+    allResultsCleared: false,
+    dailyResultsCleared: false,
+    localCacheCleared: false,
+    marketsReset: false
+  };
+
+  // 1. Clear local storage history
+  try {
+    localStorage.removeItem(LOCAL_HISTORY_KEY);
+    results.localCacheCleared = true;
+  } catch (e) {
+    console.warn('Failed to clear local history:', e);
+  }
+
+  // 2. Clear from Supabase public.all_results and public.daily_results
+  if (isSupabaseConfigured()) {
+    if (!supabaseClient) initSupabaseClient();
+    if (supabaseClient) {
+      try {
+        const { error } = await supabaseClient
+          .from('all_results')
+          .delete()
+          .not('id', 'is', null);
+
+        if (!error) {
+          results.allResultsCleared = true;
+        } else {
+          console.error('Failed to delete from all_results:', error);
+        }
+      } catch (err) {
+        console.error('Exception clearing all_results:', err);
+      }
+
+      try {
+        const { error } = await supabaseClient
+          .from('daily_results')
+          .delete()
+          .not('id', 'is', null);
+
+        if (!error) {
+          results.dailyResultsCleared = true;
+        } else {
+          console.error('Failed to delete from daily_results:', error);
+        }
+      } catch (err) {
+        console.error('Exception clearing daily_results:', err);
+      }
+
+      if (resetMarketCurrentNumbers) {
+        try {
+          const { error } = await supabaseClient
+            .from('results')
+            .update({
+              today_number: null,
+              yesterday_number: null,
+              first_number: null,
+              second_number: null,
+              updated_at: new Date().toISOString()
+            })
+            .not('id', 'is', null);
+
+          if (!error) {
+            results.marketsReset = true;
+          }
+        } catch (err) {
+          console.error('Exception resetting market numbers in results table:', err);
+        }
+      }
+    }
+  }
+
+  return results;
 }
 
 // Auto init on import

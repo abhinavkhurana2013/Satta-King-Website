@@ -1,5 +1,6 @@
 import {
   fetchMarkets,
+  fetchAllResults,
   updateMarket,
   onRealtimeChange,
   isSupabaseConfigured,
@@ -21,6 +22,7 @@ import {
 } from './supabase.js';
 
 let allMarkets = [];
+let allResults = [];
 let filteredMarkets = [];
 let currentSearchQuery = '';
 let activeChartMarket = null;
@@ -30,11 +32,36 @@ let selectedUserDateIso = getTodayIsoDateStr();
 let cachedDateResults = new Map(); // dateIso -> Map(market_name -> result_number)
 
 async function getDateResults(dateIso) {
-  if (cachedDateResults.has(dateIso)) {
-    return cachedDateResults.get(dateIso);
+  const normDate = extractIsoDate(dateIso) || dateIso;
+  const resultMap = new Map();
+
+  // First populate from allResults cache
+  if (Array.isArray(allResults) && allResults.length > 0) {
+    allResults.forEach(item => {
+      const itemDate = extractIsoDate(item.result_date);
+      if (itemDate === normDate) {
+        const rawRes = (item.result !== undefined && item.result !== null) ? item.result : item.result_number;
+        const resStr = extractResultString(rawRes);
+        if (item.market_name && resStr) {
+          resultMap.set(item.market_name, resStr);
+        }
+      }
+    });
   }
-  const resultMap = await fetchDailyResultsForDate(dateIso);
-  cachedDateResults.set(dateIso, resultMap);
+
+  if (cachedDateResults.has(normDate)) {
+    const cached = cachedDateResults.get(normDate);
+    cached.forEach((val, name) => {
+      if (!resultMap.has(name)) resultMap.set(name, val);
+    });
+    return resultMap;
+  }
+
+  const dbMap = await fetchDailyResultsForDate(normDate);
+  dbMap.forEach((val, name) => {
+    if (!resultMap.has(name)) resultMap.set(name, val);
+  });
+  cachedDateResults.set(normDate, resultMap);
   return resultMap;
 }
 
@@ -88,19 +115,49 @@ export async function initApp() {
     const { eventType, record, table } = payload || {};
 
     if (table === 'all_results' || table === 'daily_results') {
-      if (record && record.result_date && (record.market_name || record.market_id)) {
-        const dateKey = extractIsoDate(record.result_date) || record.result_date;
-        const marketName = record.market_name;
+      if (record) {
+        const normDate = extractIsoDate(record.result_date);
         const rawRes = (record.result !== undefined && record.result !== null) ? record.result : record.result_number;
-        const resNum = extractResultString(rawRes) || 'XX';
+        const resStr = extractResultString(rawRes) || 'XX';
+        const recordId = record.id;
 
-        let dateMap = cachedDateResults.get(dateKey);
-        if (!dateMap) {
-          dateMap = new Map();
-          cachedDateResults.set(dateKey, dateMap);
+        if (eventType === 'DELETE') {
+          allResults = allResults.filter(r => String(r.id) !== String(recordId));
+        } else {
+          const itemNormalized = {
+            id: record.id,
+            market_id: record.market_id,
+            market_name: record.market_name,
+            result_date: normDate,
+            result: resStr,
+            result_number: resStr,
+            draw_time: record.draw_time,
+            created_at: record.created_at,
+            updated_at: record.updated_at
+          };
+
+          const existingIdx = allResults.findIndex(r =>
+            (recordId && String(r.id) === String(recordId)) ||
+            (record.market_id && r.market_id && String(r.market_id) === String(record.market_id) && extractIsoDate(r.result_date) === normDate) ||
+            (r.market_name === record.market_name && extractIsoDate(r.result_date) === normDate)
+          );
+
+          if (existingIdx !== -1) {
+            allResults[existingIdx] = { ...allResults[existingIdx], ...itemNormalized };
+          } else {
+            allResults.unshift(itemNormalized);
+          }
         }
-        if (marketName) {
-          dateMap.set(marketName, resNum);
+
+        if (normDate) {
+          let dateMap = cachedDateResults.get(normDate);
+          if (!dateMap) {
+            dateMap = new Map();
+            cachedDateResults.set(normDate, dateMap);
+          }
+          if (record.market_name) {
+            dateMap.set(record.market_name, resStr);
+          }
         }
       }
 
@@ -110,7 +167,7 @@ export async function initApp() {
         renderRecordChartHistory(activeChartMarket, selectedYearMonth, false, selectedRecordChartDate);
       }
 
-      applyFilterAndRender();
+      applyFilterAndRender(true);
       return;
     }
 
@@ -173,8 +230,12 @@ async function loadMarketsData(showLoader = true) {
   if (errorBox) errorBox.classList.add('hidden');
 
   try {
-    const markets = await fetchMarkets();
+    const [markets, historicalResults] = await Promise.all([
+      fetchMarkets(),
+      fetchAllResults()
+    ]);
     allMarkets = markets || [];
+    allResults = historicalResults || [];
     isLoading = false;
 
     // Apply search filter and render
@@ -1052,7 +1113,7 @@ function updateConnectionBanner() {
 }
 
 // Record Chart Modal Viewer
-function populateMonthDropdown() {
+function populateMonthDropdown(selectedYm) {
   const monthSelect = document.getElementById('chart-month-select');
   if (!monthSelect) return;
 
@@ -1065,16 +1126,9 @@ function populateMonthDropdown() {
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
 
-  const previousVal = monthSelect.value;
   monthSelect.innerHTML = '';
 
-  // 1. All History option
-  const allOpt = document.createElement('option');
-  allOpt.value = 'ALL';
-  allOpt.textContent = '📜 All History';
-  monthSelect.appendChild(allOpt);
-
-  // 2. Month options for past 12 months
+  // Only months for past 12 months (no "All History" option)
   for (let i = 0; i < 12; i++) {
     const d = new Date(currentYear, currentMonth - i, 1);
     const y = d.getFullYear();
@@ -1093,10 +1147,13 @@ function populateMonthDropdown() {
     monthSelect.appendChild(opt);
   }
 
-  if (previousVal && Array.from(monthSelect.options).some(o => o.value === previousVal)) {
-    monthSelect.value = previousVal;
-  } else {
-    monthSelect.value = 'ALL';
+  const currentYmStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+  const targetVal = selectedYm || currentYmStr;
+
+  if (Array.from(monthSelect.options).some(o => o.value === targetVal)) {
+    monthSelect.value = targetVal;
+  } else if (monthSelect.options.length > 0) {
+    monthSelect.value = monthSelect.options[0].value;
   }
 }
 
@@ -1202,7 +1259,7 @@ function formatDateWithDay(dateIso) {
   return `${d}-${m}-${y}${dayName ? ` (${dayName})` : ''}`;
 }
 
-let visibleRecordCount = 30;
+let visibleRecordCount = 35;
 
 async function renderRecordChartHistory(market, yearMonth, isLoadMore = false, selectedDateIso = null) {
   const tbody = document.getElementById('chart-matrix-tbody');
@@ -1211,7 +1268,7 @@ async function renderRecordChartHistory(market, yearMonth, isLoadMore = false, s
   const activeDateIso = extractIsoDate(selectedDateIso || selectedRecordChartDate || getTodayIsoDateStr());
 
   if (!isLoadMore) {
-    visibleRecordCount = 30;
+    visibleRecordCount = 35;
     tbody.innerHTML = `
       <tr>
         <td colspan="3" class="py-8 text-center text-xs font-semibold text-slate-400 animate-pulse">
@@ -1222,11 +1279,12 @@ async function renderRecordChartHistory(market, yearMonth, isLoadMore = false, s
   }
 
   try {
-    if (!yearMonth) {
-      yearMonth = 'ALL';
+    const todayIso = getTodayIsoDateStr();
+    const currentYm = todayIso.substring(0, 7);
+    if (!yearMonth || yearMonth === 'ALL') {
+      yearMonth = selectedRecordChartDate ? selectedRecordChartDate.substring(0, 7) : currentYm;
     }
 
-    const todayIso = getTodayIsoDateStr();
     const yesterdayIso = getPreviousIsoDateStr(todayIso);
 
     const currentTodayVal = market.today_number !== undefined && market.today_number !== null ? market.today_number : market.first_number;
@@ -1250,18 +1308,57 @@ async function renderRecordChartHistory(market, yearMonth, isLoadMore = false, s
       }
     }
 
+    const marketId = market ? market.id : null;
+    const marketName = market ? market.market_name : '';
+
+    // Filter local allResults state by market_id (and market_name) and sort by result_date
+    const marketHistory = (allResults || [])
+      .filter(row => {
+        if (!row) return false;
+        // Primary key match: market.id === row.market_id
+        const idMatch = (marketId !== null && marketId !== undefined && row.market_id !== null && row.market_id !== undefined && String(row.market_id) === String(marketId));
+        // Fallback match by market_name if market_id is missing or null
+        const nameMatch = (marketName && row.market_name && row.market_name.trim().toLowerCase() === marketName.trim().toLowerCase());
+        return idMatch || nameMatch;
+      })
+      .sort((a, b) => {
+        const dateA = extractIsoDate(a.result_date) || String(a.result_date);
+        const dateB = extractIsoDate(b.result_date) || String(b.result_date);
+        return dateA.localeCompare(dateB);
+      });
+
+    console.log('MARKET HISTORY:', marketHistory);
+
     // Fetch full history records from Supabase public.all_results table
     const historyList = await fetchMarketHistory(market.market_name, yearMonth, market.id);
 
     // Map keyed strictly by date (YYYY-MM-DD) to ensure single result per date and zero duplicates
     const recordsByDate = new Map();
+
+    // Populate from local allResults filtered records
+    if (Array.isArray(marketHistory)) {
+      marketHistory.forEach(item => {
+        const itemDate = extractIsoDate(item.result_date);
+        const rawRes = (item.result !== undefined && item.result !== null) ? item.result : item.result_number;
+        const resVal = extractResultString(rawRes);
+        if (itemDate && resVal) {
+          if (yearMonth === 'ALL' || itemDate.startsWith(yearMonth)) {
+            recordsByDate.set(itemDate, resVal);
+          }
+        }
+      });
+    }
+
+    // Merge fresh fetchMarketHistory results
     if (Array.isArray(historyList)) {
       historyList.forEach(item => {
         const itemDate = extractIsoDate(item.result_date);
         const rawRes = (item.result !== undefined && item.result !== null) ? item.result : item.result_number;
         const resVal = extractResultString(rawRes);
         if (itemDate && resVal) {
-          recordsByDate.set(itemDate, resVal);
+          if (yearMonth === 'ALL' || itemDate.startsWith(yearMonth)) {
+            recordsByDate.set(itemDate, resVal);
+          }
         }
       });
     }
@@ -1294,20 +1391,15 @@ async function renderRecordChartHistory(market, yearMonth, isLoadMore = false, s
       numbersEl.textContent = `Result (${displayActiveDate}): ${activeDateResult}`;
     }
 
-    // Determine list of dates to render (sorted chronologically with newest date first)
+    // Determine list of dates to render (ordered chronologically from 1 to 30 or 31)
     let datesToRender = [];
 
-    if (yearMonth === 'ALL') {
-      // Sort all available historical dates descending (newest first, e.g. 2026-08-14, 2026-08-13, 2026-08-12...)
-      datesToRender = Array.from(recordsByDate.keys()).sort((a, b) => b.localeCompare(a));
-    } else {
-      // Single month: Generate dates from daysInMonth down to 1
-      const [yearNum, monthNum] = yearMonth.split('-').map(Number);
-      const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
-      for (let day = daysInMonth; day >= 1; day--) {
-        const dayStr = String(day).padStart(2, '0');
-        datesToRender.push(`${yearMonth}-${dayStr}`);
-      }
+    // Single month: Generate dates ascending from day 1 to daysInMonth (1, 2, 3, ... 30 or 31)
+    const [yearNum, monthNum] = yearMonth.split('-').map(Number);
+    const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayStr = String(day).padStart(2, '0');
+      datesToRender.push(`${yearMonth}-${dayStr}`);
     }
 
     if (!isLoadMore) {
