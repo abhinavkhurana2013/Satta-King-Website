@@ -360,39 +360,8 @@ function sortMarketsByUpcoming(markets) {
 }
 
 // ----------------------------------------------------
-// Google AdSense Unit Helper Functions
+// Market Render Helpers
 // ----------------------------------------------------
-function createAdSenseCard() {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'adsense-card-container w-full my-3 sm:my-4 flex justify-center items-center overflow-hidden min-h-[50px] transition-all';
-  
-  const ins = document.createElement('ins');
-  ins.className = 'adsbygoogle';
-  ins.style.display = 'block';
-  ins.style.width = '100%';
-  ins.setAttribute('data-ad-format', 'fluid');
-  ins.setAttribute('data-ad-layout-key', '-fb+5w+4e-db+86');
-  ins.setAttribute('data-ad-client', 'ca-pub-2724281909345498');
-  ins.setAttribute('data-ad-slot', '9637062261');
-  
-  wrapper.appendChild(ins);
-  return wrapper;
-}
-
-function initializeAdSenseUnits(scope = document) {
-  try {
-    const uninitialized = scope.querySelectorAll('ins.adsbygoogle:not([data-adsbygoogle-status])');
-    uninitialized.forEach(() => {
-      try {
-        (window.adsbygoogle = window.adsbygoogle || []).push({});
-      } catch (pushErr) {
-        console.debug('AdSense push notice:', pushErr);
-      }
-    });
-  } catch (err) {
-    console.debug('AdSense init notice:', err);
-  }
-}
 
 // Render 🔥 Active Market Section
 function renderActiveMarketCard(market, dateResultsMap, prevDateResultsMap) {
@@ -510,10 +479,6 @@ function renderActiveMarketCard(market, dateResultsMap, prevDateResultsMap) {
     </div>
   `;
 
-  // Append Google AdSense Ad directly below Active Market Card
-  const adCard = createAdSenseCard();
-  wrapper.appendChild(adCard);
-
   const chartBtn = wrapper.querySelector('.active-record-chart-btn');
   if (chartBtn) {
     chartBtn.addEventListener('click', (e) => {
@@ -521,9 +486,6 @@ function renderActiveMarketCard(market, dateResultsMap, prevDateResultsMap) {
       openRecordChartModal(market);
     });
   }
-
-  // Initialize AdSense unit for the active market card
-  initializeAdSenseUnits(wrapper);
 }
 
 // Cache last rendered snapshot to prevent unnecessary DOM rebuilds & AdSense re-inits
@@ -762,10 +724,6 @@ function renderMarketCards(markets, dateResultsMap, prevDateResultsMap) {
     `;
 
     container.appendChild(card);
-
-    // Append Google AdSense Ad directly below each Market Card
-    const adCard = createAdSenseCard();
-    container.appendChild(adCard);
   });
 
   // Attach record chart link listeners
@@ -780,9 +738,6 @@ function renderMarketCards(markets, dateResultsMap, prevDateResultsMap) {
       }
     });
   });
-
-  // Initialize all newly rendered AdSense units in the container
-  initializeAdSenseUnits(container);
 }
 
 // Render Skeleton Loading Placeholders
