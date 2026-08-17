@@ -345,7 +345,7 @@ function renderAdminMarketsTable(markets) {
       ? `<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">Hidden</span>`
       : `<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">Active</span>`;
 
-    const highlightBadge = item.is_highlighted
+    const highlightBadge = (item.highlighted_yellow || item.highlight_yellow)
       ? `<span class="ml-1 px-2 py-0.5 rounded-full text-xs font-bold bg-amber-200 text-amber-900 border border-amber-300">★ Yellow</span>`
       : '';
 
@@ -468,6 +468,8 @@ async function handleMarketFormSubmit(e) {
     draw_time: timeInput.value.trim(),
     record_chart_url: chartInput ? chartInput.value.trim() : '#',
     status: statusSelect ? statusSelect.value : 'Active',
+    highlighted_yellow: highlightCheck ? highlightCheck.checked : false,
+    highlight_yellow: highlightCheck ? highlightCheck.checked : false,
     is_highlighted: highlightCheck ? highlightCheck.checked : false,
     last_shifted_date: existingItem ? (existingItem.last_shifted_date || '') : ''
   };
@@ -553,7 +555,7 @@ function startEditingMarket(id) {
   if (timeInput) timeInput.value = item.draw_time || '';
   if (chartInput) chartInput.value = item.record_chart_url || '';
   if (statusSelect) statusSelect.value = item.status || 'Active';
-  if (highlightCheck) highlightCheck.checked = Boolean(item.is_highlighted);
+  if (highlightCheck) highlightCheck.checked = Boolean(item.highlighted_yellow !== undefined ? item.highlighted_yellow : (item.highlight_yellow !== undefined ? item.highlight_yellow : false));
   if (submitBtn) submitBtn.textContent = '🔄 Update Market';
   if (cancelBtn) cancelBtn.classList.remove('hidden');
 
@@ -846,7 +848,7 @@ END $$;
 
 -- 5. STORED PROCEDURE / RPC FOR IST TIMING SHIFT RULES:
 -- Normal Markets at 12:00 AM IST (00:00)
--- Gali at 12:20 AM IST (00:20)
+-- Gali at 01:00 AM IST (01:00)
 -- Disawer at 12:21 AM IST (00:21)
 CREATE OR REPLACE FUNCTION perform_daily_market_shift()
 RETURNS json
@@ -868,8 +870,8 @@ BEGIN
 
   FOR r IN SELECT * FROM results LOOP
     IF LOWER(r.market_name) LIKE '%gali%' THEN
-      -- GALI shifts at 12:20 AM IST
-      IF v_ist_time >= TIME '00:20:00' AND (r.last_shifted_date IS NULL OR r.last_shifted_date < v_ist_date) THEN
+      -- GALI shifts at 01:00 AM IST
+      IF v_ist_time >= TIME '01:00:00' AND (r.last_shifted_date IS NULL OR r.last_shifted_date < v_ist_date) THEN
         v_new_yesterday := COALESCE(r.today_number, r.yesterday_number);
         UPDATE results
         SET 

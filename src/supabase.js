@@ -492,13 +492,33 @@ function normalizeMarketRecord(record) {
   const yesterdayVal = formatYesterdayDisplayNumber(rawYesterday);
   const normDate = formatShiftedDate(record.last_shifted_date);
 
+  // Check highlighted_yellow or highlight_yellow column from DB results table (boolean, 'true', 'TRUE', 1, '1', 't')
+  // Explicitly read from highlighted_yellow / highlight_yellow column, not from is_highlighted
+  const isYellow = Boolean(
+    record.highlighted_yellow === true ||
+    record.highlighted_yellow === 'true' ||
+    record.highlighted_yellow === 'TRUE' ||
+    record.highlighted_yellow === 1 ||
+    record.highlighted_yellow === '1' ||
+    record.highlighted_yellow === 't' ||
+    record.highlight_yellow === true ||
+    record.highlight_yellow === 'true' ||
+    record.highlight_yellow === 'TRUE' ||
+    record.highlight_yellow === 1 ||
+    record.highlight_yellow === '1' ||
+    record.highlight_yellow === 't'
+  );
+
   return {
     ...record,
     today_number: todayVal,
     yesterday_number: yesterdayVal,
     first_number: todayVal,
     second_number: yesterdayVal,
-    last_shifted_date: normDate || ''
+    last_shifted_date: normDate || '',
+    highlighted_yellow: isYellow,
+    highlight_yellow: isYellow,
+    is_highlighted: isYellow
   };
 }
 
@@ -593,6 +613,12 @@ export async function addMarket(market) {
     throw new Error(errorMsg);
   }
 
+  const isHighlighted = Boolean(
+    market.highlighted_yellow !== undefined
+      ? market.highlighted_yellow
+      : (market.highlight_yellow !== undefined ? market.highlight_yellow : false)
+  );
+
   // Exact column names for Supabase "results" table.
   // Send NULL instead of "XX" for numeric columns when number is unavailable.
   const payload = {
@@ -604,7 +630,9 @@ export async function addMarket(market) {
     draw_time: market.draw_time ? String(market.draw_time).trim() : '12:00 PM',
     record_chart_url: market.record_chart_url ? String(market.record_chart_url).trim() : '#',
     status: market.status || 'Active',
-    is_highlighted: Boolean(market.is_highlighted),
+    highlighted_yellow: isHighlighted,
+    highlight_yellow: isHighlighted,
+    is_highlighted: isHighlighted,
     last_shifted_date: formattedDate // null if empty string, YYYY-MM-DD string otherwise
   };
 
@@ -705,6 +733,12 @@ export async function updateMarket(id, market) {
     throw new Error(errorMsg);
   }
 
+  const isHighlighted = Boolean(
+    market.highlighted_yellow !== undefined
+      ? market.highlighted_yellow
+      : (market.highlight_yellow !== undefined ? market.highlight_yellow : false)
+  );
+
   const payload = {
     market_name: market.market_name.trim(),
     today_number: todayNum,
@@ -714,7 +748,9 @@ export async function updateMarket(id, market) {
     draw_time: market.draw_time ? String(market.draw_time).trim() : '12:00 PM',
     record_chart_url: market.record_chart_url ? String(market.record_chart_url).trim() : '#',
     status: market.status || 'Active',
-    is_highlighted: Boolean(market.is_highlighted),
+    highlighted_yellow: isHighlighted,
+    highlight_yellow: isHighlighted,
+    is_highlighted: isHighlighted,
     last_shifted_date: formattedDate,
     updated_at: new Date().toISOString()
   };
@@ -861,6 +897,25 @@ export function getPreviousIsoDateStr(dateIso) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+export const DB_START_DATE = '2026-08-10';
+
+// Purge any legacy/mock local history older than database start date
+try {
+  const rawLocal = localStorage.getItem(LOCAL_HISTORY_KEY);
+  if (rawLocal) {
+    const localList = JSON.parse(rawLocal);
+    if (Array.isArray(localList)) {
+      const cleaned = localList.filter(item => {
+        const d = extractIsoDate(item.result_date) || item.result_date;
+        return d && d >= DB_START_DATE;
+      });
+      localStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(cleaned));
+    }
+  }
+} catch (e) {
+  // ignore
+}
+
 /**
  * Fetch results for all markets on a specific date (YYYY-MM-DD) from Supabase public.all_results table
  */
@@ -868,7 +923,8 @@ export async function fetchDailyResultsForDate(dateIso) {
   const normDate = extractIsoDate(dateIso) || formatShiftedDate(dateIso) || dateIso;
   const resultMap = new Map();
 
-  if (!normDate) return resultMap;
+  // The database has no results before 2026-08-10
+  if (!normDate || normDate < DB_START_DATE) return resultMap;
 
   // 1. Query Supabase public.all_results table for exact result_date
   if (isSupabaseConfigured()) {
@@ -912,28 +968,28 @@ export async function fetchDailyResultsForDate(dateIso) {
         console.warn(`[Supabase all_results Query Exception for ${normDate}]:`, err);
       }
     }
-  }
-
-  // 2. Merge local storage history if available
-  try {
-    const rawLocal = localStorage.getItem(LOCAL_HISTORY_KEY);
-    if (rawLocal) {
-      const localList = JSON.parse(rawLocal);
-      if (Array.isArray(localList)) {
-        localList.forEach(item => {
-          const itemNormDate = extractIsoDate(item.result_date) || item.result_date;
-          if (itemNormDate === normDate && item.market_name) {
-            const rawRes = (item.result !== undefined && item.result !== null) ? item.result : item.result_number;
-            const resStr = extractResultString(rawRes);
-            if (resStr && !resultMap.has(item.market_name)) {
-              resultMap.set(item.market_name, resStr);
+  } else {
+    // 2. Only merge local storage fallback if Supabase is unconfigured
+    try {
+      const rawLocal = localStorage.getItem(LOCAL_HISTORY_KEY);
+      if (rawLocal) {
+        const localList = JSON.parse(rawLocal);
+        if (Array.isArray(localList)) {
+          localList.forEach(item => {
+            const itemNormDate = extractIsoDate(item.result_date) || item.result_date;
+            if (itemNormDate === normDate && item.market_name && itemNormDate >= DB_START_DATE) {
+              const rawRes = (item.result !== undefined && item.result !== null) ? item.result : item.result_number;
+              const resStr = extractResultString(rawRes);
+              if (resStr && !resultMap.has(item.market_name)) {
+                resultMap.set(item.market_name, resStr);
+              }
             }
-          }
-        });
+          });
+        }
       }
+    } catch (e) {
+      console.warn('Failed to parse local history for date:', e);
     }
-  } catch (e) {
-    console.warn('Failed to parse local history for date:', e);
   }
 
   return resultMap;
@@ -984,10 +1040,109 @@ export async function triggerDailyShiftRPC() {
 }
 
 /**
+ * Force shift Gali today result to yesterday result and update database/storage
+ */
+export async function forceShiftGaliTodayToYesterday() {
+  const { istDateStr } = getISTDateTime();
+  const todayDateObj = new Date(istDateStr + 'T00:00:00');
+  todayDateObj.setDate(todayDateObj.getDate() - 1);
+  const yyyy = todayDateObj.getFullYear();
+  const mm = String(todayDateObj.getMonth() + 1).padStart(2, '0');
+  const dd = String(todayDateObj.getDate()).padStart(2, '0');
+  const prevIstDateStr = `${yyyy}-${mm}-${dd}`;
+
+  let shifted = false;
+
+  // 1. Check in Supabase if configured
+  if (isSupabaseConfigured()) {
+    if (!supabaseClient) initSupabaseClient();
+    if (supabaseClient) {
+      try {
+        const { data: galiMarkets } = await supabaseClient
+          .from('results')
+          .select('*')
+          .ilike('market_name', '%gali%');
+
+        if (galiMarkets && galiMarkets.length > 0) {
+          for (const gm of galiMarkets) {
+            const rawToday = gm.today_number !== undefined ? gm.today_number : gm.first_number;
+            const numToday = toNumericOrNull(rawToday);
+
+            if (numToday !== null) {
+              const newYesterday = numToday;
+              await supabaseClient
+                .from('results')
+                .update({
+                  today_number: null,
+                  first_number: null,
+                  yesterday_number: newYesterday,
+                  second_number: newYesterday,
+                  last_shifted_date: istDateStr,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', gm.id);
+
+              await saveDailyResultRecord(gm.market_name, prevIstDateStr, numToday, gm.id);
+
+              // Remove today's entry from all_results for Gali so today's box renders XX
+              try {
+                await supabaseClient
+                  .from('all_results')
+                  .delete()
+                  .ilike('market_name', '%gali%')
+                  .eq('result_date', istDateStr);
+              } catch (delErr) {
+                // ignore
+              }
+
+              shifted = true;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Gali shift in Supabase notice:', e);
+      }
+    }
+  }
+
+  // 2. Also check in local storage cache
+  try {
+    const rawLocal = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (rawLocal) {
+      const parsed = JSON.parse(rawLocal);
+      if (Array.isArray(parsed)) {
+        let changed = false;
+        parsed.forEach(m => {
+          if ((m.market_name || '').toLowerCase().includes('gali')) {
+            const numToday = toNumericOrNull(m.today_number !== undefined ? m.today_number : m.first_number);
+            if (numToday !== null) {
+              m.yesterday_number = numToday;
+              m.second_number = numToday;
+              m.today_number = null;
+              m.first_number = null;
+              m.last_shifted_date = istDateStr;
+              changed = true;
+              shifted = true;
+            }
+          }
+        });
+        if (changed) {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(parsed));
+        }
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  return shifted;
+}
+
+/**
  * Execute IST-based Today's -> Yesterday's Automatic Shift
  * Timing Rules:
  * 1. Normal Markets: 12:00 AM IST (00:00)
- * 2. Gali: 12:20 AM IST (00:20)
+ * 2. Gali: 01:00 AM IST (01:00 / 60 minutes)
  * 3. Disawer: 12:21 AM IST (00:21)
  * Safe: Reads today_number, copies to yesterday_number, sets today_number to NULL.
  * Idempotent: Stores last_shifted_date (IST date YYYY-MM-DD), runs only once per day.
@@ -1000,6 +1155,12 @@ export async function executeAutoShiftIST(allMarkets) {
 
   const { istDateStr, istMinutes } = getISTDateTime();
   let updatedAny = false;
+
+  // Always force Gali shift if past 1:00 AM IST
+  if (istMinutes >= 60) {
+    const galiShifted = await forceShiftGaliTodayToYesterday();
+    if (galiShifted) updatedAny = true;
+  }
 
   // Calculate previous date string (yesterday in IST relative to istDateStr)
   const todayDateObj = new Date(istDateStr + 'T00:00:00');
@@ -1016,19 +1177,20 @@ export async function executeAutoShiftIST(allMarkets) {
 
     let targetShiftMinutes = 0; // 12:00 AM IST for Normal markets
     if (isGali) {
-      targetShiftMinutes = 20; // 12:20 AM IST
+      targetShiftMinutes = 60; // 01:00 AM IST (60 mins from midnight)
     } else if (isDisawer) {
       targetShiftMinutes = 21; // 12:21 AM IST
     }
 
     const lastShifted = formatShiftedDate(market.last_shifted_date);
+    const rawToday = market.today_number !== undefined ? market.today_number : market.first_number;
+    const numToday = toNumericOrNull(rawToday);
 
-    // If current IST time is past/at target shift time AND market hasn't been shifted for today's IST date yet
-    if (istMinutes >= targetShiftMinutes && lastShifted !== istDateStr) {
-      const rawToday = market.today_number !== undefined ? market.today_number : market.first_number;
+    // If current IST time is past/at target shift time AND (market hasn't been shifted for today's IST date yet OR Gali has a today number after 1 AM)
+    const shouldShift = (istMinutes >= targetShiftMinutes && (lastShifted !== istDateStr || (isGali && numToday !== null)));
+
+    if (shouldShift) {
       const rawYesterday = market.yesterday_number !== undefined ? market.yesterday_number : market.second_number;
-
-      const numToday = toNumericOrNull(rawToday);
       const numYesterday = toNumericOrNull(rawYesterday);
 
       // SAFETY RULE: Read today_number. Copy today's number into yesterday_number. Set today's number to NULL.
@@ -1036,9 +1198,9 @@ export async function executeAutoShiftIST(allMarkets) {
       // If today's result was unavailable (NULL), yesterday remains existing yesterday number.
       const newYesterdayNum = (numToday !== null) ? numToday : numYesterday;
 
-      // Save today's result into record chart history (daily_results) for yesterday's date if it existed
+      // Save today's result into record chart history (all_results) for yesterday's date if it existed
       if (numToday !== null) {
-        await saveDailyResultRecord(market.market_name, prevIstDateStr, numToday);
+        await saveDailyResultRecord(market.market_name, prevIstDateStr, numToday, market.id);
       }
 
       const updatedMarket = {
@@ -1067,6 +1229,9 @@ export async function executeAutoShiftIST(allMarkets) {
  * Fetch all historical records from Supabase public.all_results table
  */
 export async function fetchAllResults() {
+  const mergedMap = new Map(); // key: "market_name|result_date"
+
+  // 1. Fetch exclusively from all_results table
   if (isSupabaseConfigured()) {
     if (!supabaseClient) initSupabaseClient();
     if (supabaseClient) {
@@ -1074,36 +1239,68 @@ export async function fetchAllResults() {
         const { data, error } = await supabaseClient
           .from('all_results')
           .select('*')
+          .gte('result_date', DB_START_DATE)
           .order('result_date', { ascending: false });
 
-        console.log('ALL RESULTS FROM SUPABASE:', data);
-        console.log('ALL RESULTS ERROR:', error);
-
-        if (error) {
-          console.error('ALL_RESULTS READ ERROR:', error);
-        } else if (data && Array.isArray(data)) {
-          return data;
+        if (!error && Array.isArray(data)) {
+          data.forEach(item => {
+            const normDate = extractIsoDate(item.result_date);
+            const rawRes = (item.result !== undefined && item.result !== null) ? item.result : item.result_number;
+            const resStr = extractResultString(rawRes);
+            if (item.market_name && normDate && resStr && normDate >= DB_START_DATE) {
+              const key = `${item.market_name.trim().toLowerCase()}|${normDate}`;
+              mergedMap.set(key, {
+                id: item.id,
+                market_id: item.market_id,
+                market_name: item.market_name.trim(),
+                result_date: normDate,
+                result: resStr,
+                result_number: resStr,
+                draw_time: item.draw_time,
+                created_at: item.created_at,
+                updated_at: item.updated_at
+              });
+            }
+          });
         }
       } catch (err) {
-        console.error('ALL_RESULTS READ ERROR:', err);
+        console.warn('all_results fetch notice:', err);
       }
+    }
+  } else {
+    // Fallback to local storage history only if unconfigured
+    try {
+      const rawLocal = localStorage.getItem(LOCAL_HISTORY_KEY);
+      if (rawLocal) {
+        const localList = JSON.parse(rawLocal);
+        if (Array.isArray(localList)) {
+          localList.forEach(item => {
+            const normDate = extractIsoDate(item.result_date);
+            const rawRes = (item.result !== undefined && item.result !== null) ? item.result : item.result_number;
+            const resStr = extractResultString(rawRes);
+            if (item.market_name && normDate && resStr && normDate >= DB_START_DATE) {
+              const key = `${item.market_name.trim().toLowerCase()}|${normDate}`;
+              if (!mergedMap.has(key)) {
+                mergedMap.set(key, {
+                  id: item.id,
+                  market_id: item.market_id,
+                  market_name: item.market_name.trim(),
+                  result_date: normDate,
+                  result: resStr,
+                  result_number: resStr,
+                  draw_time: item.draw_time
+                });
+              }
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse local history:', e);
     }
   }
 
-  // Fallback to local storage history
-  try {
-    const rawLocal = localStorage.getItem(LOCAL_HISTORY_KEY);
-    if (rawLocal) {
-      const localList = JSON.parse(rawLocal);
-      if (Array.isArray(localList)) {
-        return localList;
-      }
-    }
-  } catch (e) {
-    console.warn('Failed to parse local history:', e);
-  }
-
-  return [];
+  return Array.from(mergedMap.values()).sort((a, b) => b.result_date.localeCompare(a.result_date));
 }
 
 /**
@@ -1117,46 +1314,49 @@ export async function fetchMarketHistory(marketName, yearMonth = 'ALL', marketId
     yearMonth = 'ALL';
   }
 
+  const isAllMarkets = !marketName || marketName === 'ALL' || marketName === 'all';
+
   // 1. Fetch from Supabase public.all_results table
   if (isSupabaseConfigured()) {
     if (!supabaseClient) initSupabaseClient();
     if (supabaseClient) {
       try {
-        const { data, error } = await supabaseClient
-          .from('all_results')
-          .select('*')
-          .order('result_date', { ascending: false });
+        let query = supabaseClient.from('all_results').select('*').gte('result_date', DB_START_DATE);
 
-        console.log('ALL RESULTS FROM SUPABASE:', data);
-        console.log('ALL RESULTS ERROR:', error);
+        // Apply targeted query filtering if specific market
+        if (!isAllMarkets) {
+          if (marketId !== null && marketId !== undefined && String(marketId).trim() !== '') {
+            query = query.or(`market_id.eq.${marketId},market_name.ilike.${marketName}`);
+          } else {
+            query = query.ilike('market_name', marketName);
+          }
+        }
+
+        if (yearMonth !== 'ALL' && /^\d{4}-\d{2}$/.test(yearMonth)) {
+          const startDate = `${yearMonth}-01` < DB_START_DATE ? DB_START_DATE : `${yearMonth}-01`;
+          query = query.gte('result_date', startDate).lte('result_date', `${yearMonth}-31`);
+        }
+
+        query = query.order('result_date', { ascending: false });
+
+        // Timeout race so slow connection doesn't block forever
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('fetchMarketHistory timeout')), 4000)
+        );
+
+        const { data, error } = await Promise.race([query, timeoutPromise]);
 
         if (error) {
-          console.error('ALL_RESULTS READ ERROR:', error);
+          console.warn('ALL_RESULTS READ NOTICE:', error.message || error);
         } else if (data && Array.isArray(data)) {
-          const marketHistory = data
-            .filter(row => {
-              if (!row) return false;
-              // Primary key match: market.id === row.market_id
-              const idMatch = (marketId !== null && marketId !== undefined && row.market_id !== null && row.market_id !== undefined && String(row.market_id) === String(marketId));
-              // Fallback match by market_name if market_id is null/missing
-              const nameMatch = (marketName && row.market_name && row.market_name.trim().toLowerCase() === marketName.trim().toLowerCase());
-              return idMatch || nameMatch;
-            })
-            .sort((a, b) => {
-              const dateA = extractIsoDate(a.result_date) || String(a.result_date);
-              const dateB = extractIsoDate(b.result_date) || String(b.result_date);
-              return dateA.localeCompare(dateB);
-            });
-
-          console.log('MARKET HISTORY:', marketHistory);
-
-          marketHistory.forEach(item => {
+          data.forEach(item => {
             const normDate = extractIsoDate(item.result_date);
             const rawRes = (item.result !== undefined && item.result !== null) ? item.result : item.result_number;
             const resStr = extractResultString(rawRes);
-            if (normDate && resStr) {
+            if (normDate && resStr && normDate >= DB_START_DATE) {
               if (yearMonth === 'ALL' || normDate.startsWith(yearMonth)) {
-                historyMap.set(normDate, {
+                const mapKey = isAllMarkets ? `${(item.market_name || '').trim().toLowerCase()}|${normDate}` : normDate;
+                historyMap.set(mapKey, {
                   id: item.id,
                   market_id: item.market_id,
                   market_name: item.market_name || marketName,
@@ -1170,41 +1370,45 @@ export async function fetchMarketHistory(marketName, yearMonth = 'ALL', marketId
           });
         }
       } catch (err) {
-        console.error('ALL_RESULTS READ ERROR (EXCEPTION):', err);
+        console.warn('fetchMarketHistory notice:', err.message || err);
       }
     }
-  }
-
-  // 2. Merge local storage history if available
-  try {
-    const rawLocal = localStorage.getItem(LOCAL_HISTORY_KEY);
-    if (rawLocal) {
-      const localList = JSON.parse(rawLocal);
-      if (Array.isArray(localList)) {
-        localList.forEach(item => {
-          const normDate = extractIsoDate(item.result_date);
-          if (normDate && (yearMonth === 'ALL' || normDate.startsWith(yearMonth))) {
-            const matchesMarket = (marketId && item.market_id && String(item.market_id) === String(marketId)) ||
-                                  (!marketName || (item.market_name && item.market_name.trim().toLowerCase() === marketName.trim().toLowerCase()));
-            if (matchesMarket) {
-              const rawRes = (item.result !== undefined && item.result !== null) ? item.result : item.result_number;
-              const resStr = extractResultString(rawRes);
-              if (resStr && !historyMap.has(normDate)) {
-                historyMap.set(normDate, {
-                  market_id: item.market_id,
-                  market_name: item.market_name || marketName,
-                  result_date: normDate,
-                  result: resStr,
-                  result_number: resStr
-                });
+  } else {
+    // Fallback to local storage history only if unconfigured
+    try {
+      const rawLocal = localStorage.getItem(LOCAL_HISTORY_KEY);
+      if (rawLocal) {
+        const localList = JSON.parse(rawLocal);
+        if (Array.isArray(localList)) {
+          localList.forEach(item => {
+            const normDate = extractIsoDate(item.result_date);
+            if (normDate && normDate >= DB_START_DATE && (yearMonth === 'ALL' || normDate.startsWith(yearMonth))) {
+              const matchesMarket = isAllMarkets ||
+                                    (marketId && item.market_id && String(item.market_id) === String(marketId)) ||
+                                    (!marketName || (item.market_name && item.market_name.trim().toLowerCase() === marketName.trim().toLowerCase()));
+              if (matchesMarket) {
+                const rawRes = (item.result !== undefined && item.result !== null) ? item.result : item.result_number;
+                const resStr = extractResultString(rawRes);
+                if (resStr) {
+                  const mapKey = isAllMarkets ? `${(item.market_name || '').trim().toLowerCase()}|${normDate}` : normDate;
+                  if (!historyMap.has(mapKey)) {
+                    historyMap.set(mapKey, {
+                      market_id: item.market_id,
+                      market_name: item.market_name || marketName,
+                      result_date: normDate,
+                      result: resStr,
+                      result_number: resStr
+                    });
+                  }
+                }
               }
             }
-          }
-        });
+          });
+        }
       }
+    } catch (e) {
+      console.warn('Failed to parse local history:', e);
     }
-  } catch (e) {
-    console.warn('Failed to parse local history:', e);
   }
 
   // Chronological order (newest date first)
@@ -1220,6 +1424,7 @@ export async function saveDailyResultRecord(marketName, resultDate, resultNumber
   const numVal = extractResultString(resultNumber);
   if (!numVal || numVal === 'XX' || numVal === '--') return;
   const normDate = extractIsoDate(resultDate) || resultDate;
+  if (normDate < DB_START_DATE) return;
 
   // 1. Save to local storage (preventing duplicates for same date)
   try {

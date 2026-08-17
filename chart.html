@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en" class="h-full bg-gray-100 text-gray-900 antialiased selection:bg-amber-200">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Record Chart – Satta King Live Results</title>
+    <meta name="description" content="Official Record Chart and Monthly Draw History for Satta King Markets.">
+    <meta name="google-site-verification" content="HoEbmwMpmxqNDJ_ybL9x3pDDBmPkZGzdoPw2VhG03kw" />
+    
+    <!-- Tailwind CSS -->
+    <link rel="stylesheet" href="/src/index.css" />
+  </head>
+  <body class="min-h-full flex flex-col bg-slate-950 font-sans pb-12 text-slate-100 selection:bg-amber-400 selection:text-black">
+
+    <!-- HEADER -->
+    <header class="bg-amber-400 h-14 flex items-center px-4 shadow-lg z-30 shrink-0 sticky top-0 border-b border-amber-500">
+      <div class="w-full max-w-5xl mx-auto flex items-center justify-between gap-2">
+        
+        <!-- Left: Back to Home -->
+        <a href="/" id="btn-back-home" class="inline-flex items-center gap-1.5 text-black font-black text-xs sm:text-sm hover:bg-amber-300 transition-colors bg-amber-300/90 px-3 py-1.5 rounded-xl border border-amber-600/30 shadow-xs">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          <span>Home</span>
+        </a>
+
+        <!-- Center: Brand Title -->
+        <a href="/" class="text-base sm:text-xl font-black uppercase tracking-wider text-black flex items-center gap-1.5 hover:opacity-90 transition-opacity">
+          <span>👑</span> <span>Satta King Record Chart</span>
+        </a>
+
+        <!-- Right: Live Refresh -->
+        <button id="chart-refresh-btn" title="Refresh Live Records" class="p-2 rounded-xl bg-amber-300 hover:bg-amber-200 text-black transition-colors cursor-pointer border border-amber-600/30 shadow-xs flex items-center gap-1 text-xs font-black">
+          <svg id="refresh-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span class="hidden sm:inline">Refresh</span>
+        </button>
+
+      </div>
+    </header>
+
+    <!-- OFFLINE / RECONNECTING BANNER -->
+    <div id="offline-banner" class="hidden bg-rose-600 text-white px-4 py-2 text-center text-xs sm:text-sm font-bold shadow-md flex items-center justify-center gap-2">
+      <span>⚠️ Offline mode active. Showing cached records.</span>
+      <button id="retry-connection-btn" class="underline hover:text-amber-200 cursor-pointer ml-2 text-xs uppercase tracking-wider bg-rose-800 px-2.5 py-1 rounded">
+        Retry
+      </button>
+    </div>
+
+    <!-- MAIN CONTAINER -->
+    <main class="flex-1 max-w-5xl w-full mx-auto px-3 sm:px-4 pt-4 pb-10 space-y-4">
+      
+      <!-- HERO & VIEW CONTROLS CARD -->
+      <section class="bg-slate-900/90 text-white rounded-2xl p-4 sm:p-5 shadow-2xl border border-slate-800 space-y-4 backdrop-blur-sm">
+        
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+          <div>
+            <div class="inline-flex items-center gap-1.5 bg-amber-400/20 text-amber-300 text-[11px] font-black uppercase px-2.5 py-0.5 rounded-lg border border-amber-400/30">
+              <span>📊 Satta King Live Record Database</span>
+            </div>
+            <h1 id="page-market-name" class="text-2xl sm:text-3xl font-black text-amber-400 tracking-wide mt-1.5 uppercase">
+              All Markets Record Chart
+            </h1>
+            <p id="page-draw-time" class="text-xs text-slate-400 font-semibold mt-0.5">
+              Showing complete winning results for all game markets
+            </p>
+          </div>
+
+          <!-- Mode / Market Switcher Dropdown -->
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="flex flex-col gap-1 w-full sm:w-auto">
+              <label for="market-select" class="text-[11px] text-slate-400 font-black uppercase tracking-wider">Select Market:</label>
+              <select id="market-select" class="bg-slate-950 text-amber-300 border border-slate-700 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer shadow-inner min-w-[220px]">
+                <option value="ALL">🌟 ALL MARKETS (Combined Matrix)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- VIEW TOGGLE TABS -->
+        <div class="flex items-center justify-between flex-wrap gap-2 pt-1">
+          <div class="inline-flex p-1 bg-slate-950 rounded-xl border border-slate-800 gap-1 text-xs font-bold">
+            <button id="view-mode-matrix-btn" class="px-3 py-1.5 rounded-lg bg-amber-400 text-slate-950 font-black transition-all shadow-xs cursor-pointer flex items-center gap-1.5">
+              <span>📋 All Markets Matrix</span>
+            </button>
+            <button id="view-mode-single-btn" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all cursor-pointer flex items-center gap-1.5">
+              <span>🎯 Market History Table</span>
+            </button>
+          </div>
+
+          <!-- Total Result Stats Pill -->
+          <div class="flex items-center gap-2">
+            <span id="chart-total-count-badge" class="bg-amber-400/10 border border-amber-400/30 text-amber-300 px-3 py-1 rounded-xl text-xs font-bold">
+              ⚡ Loading database...
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <!-- FILTER CONTROLS BAR -->
+      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow-md flex flex-wrap items-center justify-between gap-3 text-xs text-slate-300 font-bold">
+        <div class="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          
+          <!-- Month Dropdown -->
+          <div class="flex items-center gap-1.5">
+            <label for="filter-month-select" class="text-amber-400 font-black uppercase text-[11px]">Period:</label>
+            <select id="filter-month-select" class="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer shadow-inner">
+              <option value="ALL">🌟 All Time (Full History)</option>
+            </select>
+          </div>
+
+          <!-- Date Search Input -->
+          <div class="flex items-center gap-1.5">
+            <label for="filter-date-input" class="text-amber-400 font-black uppercase text-[11px]">Date:</label>
+            <input 
+              type="date" 
+              id="filter-date-input" 
+              class="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer shadow-inner"
+            />
+          </div>
+
+          <!-- Search Filter Keyword -->
+          <div class="flex items-center gap-1.5">
+            <label for="filter-search-input" class="text-amber-400 font-black uppercase text-[11px]">Search:</label>
+            <input 
+              type="text" 
+              id="filter-search-input" 
+              placeholder="Search number or market..." 
+              class="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-400 shadow-inner w-36 sm:w-44"
+            />
+          </div>
+        </div>
+
+        <!-- Quick Clear & Back Action -->
+        <div class="flex items-center gap-2">
+          <button id="btn-clear-filters" class="text-amber-400 hover:text-amber-300 underline font-black text-xs cursor-pointer">
+            Reset Filters
+          </button>
+        </div>
+      </section>
+
+      <!-- VIEW CONTAINER: 1. ALL MARKETS MATRIX TABLE -->
+      <section id="matrix-view-container" class="bg-slate-900 rounded-2xl shadow-xl border border-slate-800 overflow-hidden">
+        <div class="p-3.5 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
+          <div class="flex items-center gap-2">
+            <span class="text-base">📋</span>
+            <h2 id="matrix-heading" class="text-sm font-black text-amber-400 uppercase tracking-wide">
+              All Markets Daily Results Grid
+            </h2>
+          </div>
+          <span id="matrix-status-text" class="text-xs text-slate-400 font-semibold">
+            Scroll horizontally to view all market columns →
+          </span>
+        </div>
+
+        <div class="overflow-x-auto max-h-[70vh]">
+          <table class="w-full text-sm border-collapse text-left">
+            <thead id="matrix-table-head" class="bg-slate-950 text-amber-400 text-xs uppercase font-black sticky top-0 z-20 shadow-sm border-b border-slate-800">
+              <!-- Dynamically rendered market headers -->
+            </thead>
+            <tbody id="matrix-table-body" class="divide-y divide-slate-800 text-slate-200">
+              <tr>
+                <td colspan="10" class="py-12 text-center text-slate-400 font-semibold">
+                  <div class="inline-flex items-center gap-2">
+                    <svg class="animate-spin h-5 w-5 text-amber-400" viewBox="0 0 24 24" fill="none">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                    <span>Loading all market results...</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div id="matrix-pagination-footer" class="p-3 bg-slate-950/90 border-t border-slate-800 text-center flex items-center justify-between flex-wrap gap-2">
+          <span id="matrix-showing-count" class="text-xs text-slate-400 font-bold">Showing dates</span>
+          <button id="matrix-load-more-btn" class="bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-black px-4 py-2 rounded-xl border border-slate-700 cursor-pointer transition-colors shadow-sm">
+            👇 Load More Dates
+          </button>
+        </div>
+      </section>
+
+      <!-- VIEW CONTAINER: 2. SINGLE MARKET DETAILED HISTORY TABLE -->
+      <section id="single-view-container" class="hidden bg-slate-900 rounded-2xl shadow-xl border border-slate-800 overflow-hidden">
+        <div class="p-3.5 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
+          <div class="flex items-center gap-2">
+            <span class="text-base">🎯</span>
+            <h2 id="single-market-heading" class="text-sm font-black text-amber-400 uppercase tracking-wide">
+              Detailed Market History
+            </h2>
+          </div>
+          <span id="single-showing-count" class="text-xs text-slate-400 font-bold">
+            0 Records
+          </span>
+        </div>
+
+        <div class="overflow-x-auto max-h-[70vh]">
+          <table class="w-full text-sm border-collapse">
+            <thead class="bg-slate-950 text-amber-400 text-xs uppercase font-black sticky top-0 z-20 border-b border-slate-800 tracking-wider">
+              <tr>
+                <th class="py-3 px-3 sm:px-4 text-left">Date</th>
+                <th class="py-3 px-3 sm:px-4 text-left hidden sm:table-cell">Day</th>
+                <th class="py-3 px-3 sm:px-4 text-left">Market Name</th>
+                <th class="py-3 px-3 sm:px-4 text-center">Result Number</th>
+              </tr>
+            </thead>
+            <tbody id="chart-table-body" class="divide-y divide-slate-800 text-slate-200">
+              <tr>
+                <td colspan="4" class="py-12 text-center text-slate-400 font-semibold">
+                  <div class="inline-flex items-center gap-2">
+                    <svg class="animate-spin h-5 w-5 text-amber-400" viewBox="0 0 24 24" fill="none">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                    <span>Loading single market records...</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div id="chart-footer-pagination" class="hidden p-3 bg-slate-950/90 border-t border-slate-800 text-center">
+          <button id="load-more-records-btn" class="bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-black px-5 py-2.5 rounded-xl border border-slate-700 cursor-pointer transition-colors shadow-sm">
+            👇 Load More Historical Records
+          </button>
+        </div>
+      </section>
+
+      <!-- BOTTOM NAVIGATION / HELPFUL FOOTER -->
+      <section class="bg-slate-900/80 text-white rounded-2xl p-4 text-center space-y-2 border border-slate-800">
+        <h3 class="text-sm font-black text-amber-400 uppercase">Need Live Daily Updates?</h3>
+        <p class="text-xs text-slate-400">
+          Check live opening & closing numbers for all Satta King markets on our main portal.
+        </p>
+        <div class="pt-2">
+          <a href="/" class="inline-flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black px-4 py-2 rounded-xl text-xs uppercase tracking-wider transition-colors shadow-sm">
+            <span>👑 Return to Satta King Home</span>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+            </svg>
+          </a>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-xs w-full pointer-events-none px-2"></div>
+
+    <!-- SCRIPT -->
+    <script type="module" src="/src/chart.js"></script>
+  </body>
+</html>

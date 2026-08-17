@@ -6,12 +6,7 @@
     <title>Satta King – Latest Market Results &amp; Updates</title>
     <meta name="description" content="Satta King – Live market results and record charts updated in real time.">
     <meta name="google-site-verification" content="HoEbmwMpmxqNDJ_ybL9x3pDDBmPkZGzdoPw2VhG03kw" />
-    <meta name="monetag" content="e6ee95a1bd1ffcd31c9b2d490734db47">
-    <script>(function(s){s.dataset.zone='11575640',s.src='https://nap5k.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
-    <script src="https://quge5.com/88/tag.min.js" data-zone="270082" async data-cfasync="false"></script>
-    <script>(function(s){s.dataset.zone='11576228',s.src='https://n6wxm.com/vignette.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
-    <script src="https://5gvci.com/act/files/tag.min.js?z=11576282" data-cfasync="false" async></script>
-    <script>(function(s){s.dataset.zone='11579735',s.src='https://n6wxm.com/vignette.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
+    <meta name="monetag" content="0b82118f506d66848310035acb9ae414">
     <link rel="canonical" href="https://sattaking.vercel.app/" />
 
     <!-- Open Graph Metadata -->
@@ -29,6 +24,13 @@
       "url": "https://sattaking.vercel.app/"
     }
     </script>
+
+    <script>(function(s){s.dataset.zone='11594365',s.src='https://nap5k.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
+    <script>(function(s){s.dataset.zone='11594449',s.src='https://n6wxm.com/vignette.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
+    <script>(function(s){s.dataset.zone='11594981',s.src='https://nap5k.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
+    <script>(function(s){s.dataset.zone='11594989',s.src='https://n6wxm.com/vignette.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5567818233431491"
+     crossorigin="anonymous"></script>
 
     <!-- Tailwind CSS -->
     <link rel="stylesheet" href="/src/index.css" />
@@ -115,12 +117,19 @@
             </div>
           </div>
 
-          <!-- 🔥 ACTIVE MARKET SECTION -->
+          <!-- 🔥 ACTIVE MARKET SECTION (HIGHLIGHTED BLACK) -->
           <div id="active-market-wrapper" class="w-full">
             <!-- Populated dynamically by JS with closest draw market -->
           </div>
 
-          <!-- MARKETS LIST CONTAINER -->
+          <!-- DIVIDER LINE -->
+          <div class="w-full my-4 flex items-center gap-3">
+            <div class="h-px bg-slate-300 grow"></div>
+            <span class="text-[11px] font-extrabold text-slate-500 uppercase tracking-widest px-2">Market Results</span>
+            <div class="h-px bg-slate-300 grow"></div>
+          </div>
+
+          <!-- MARKETS LIST CONTAINER (WHITE CARDS) -->
           <div id="markets-container" class="space-y-3">
             <!-- Market cards populated dynamically by app.js -->
           </div>
@@ -215,6 +224,14 @@
           <span class="text-amber-400 text-base">🏠</span>
           <span>Home</span>
         </button>
+        <a 
+          href="/chart.html" 
+          data-record-chart="true"
+          class="no-pop no-popunder no-ad no-click-ad monetag-ignore w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl hover:bg-slate-800 text-slate-200 font-bold text-sm transition-colors text-left cursor-pointer"
+        >
+          <span class="text-amber-400 text-base">📊</span>
+          <span>Record Charts</span>
+        </a>
       </nav>
 
       <!-- Drawer Footer -->
@@ -223,70 +240,6 @@
         <span class="text-[10px] text-amber-400/80 font-mono">Live Results</span>
       </div>
     </aside>
-
-    <!-- RECORD CHART MODAL -->
-    <div id="record-chart-modal" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs items-center justify-center p-3 sm:p-5">
-      <div class="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden animate-slide-up">
-        
-        <div class="p-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
-          <div>
-            <h3 id="chart-market-title" class="text-lg font-black text-amber-400">
-              Record Chart
-            </h3>
-            <p id="chart-market-time" class="text-xs text-slate-400">
-              Monthly Draw History
-            </p>
-          </div>
-          <button 
-            id="close-chart-modal-btn" 
-            class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <div class="p-3 bg-amber-50 border-b border-amber-200 flex flex-wrap items-center justify-between gap-3 text-xs text-amber-900 font-bold">
-          <div class="flex flex-wrap items-center gap-3">
-            <div class="flex items-center gap-1.5">
-              <label for="chart-date-input" class="text-slate-800 font-black uppercase text-[11px]">Date:</label>
-              <input 
-                type="date" 
-                id="chart-date-input" 
-                class="bg-white border border-amber-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-2xs"
-              />
-            </div>
-            <div class="flex items-center gap-1.5">
-              <label for="chart-month-select" class="text-slate-800 font-black uppercase text-[11px]">Month:</label>
-              <select id="chart-month-select" class="bg-white border border-amber-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-2xs">
-                <!-- Month options populated dynamically -->
-              </select>
-            </div>
-          </div>
-          <span id="chart-latest-numbers" class="text-slate-800 font-bold bg-amber-200/80 px-2.5 py-1 rounded-lg border border-amber-300">Result: --</span>
-          <a id="chart-external-link" href="#" target="_blank" class="hidden text-blue-700 hover:underline">
-            Open Chart Link ↗
-          </a>
-        </div>
-
-        <div class="flex-1 overflow-y-auto p-3 sm:p-4">
-          <table class="w-full text-sm border-collapse">
-            <thead>
-              <tr class="bg-slate-100 text-slate-700 text-xs uppercase font-extrabold border-b border-slate-200">
-                <th class="py-2.5 px-3 text-left">Date</th>
-                <th class="py-2.5 px-3 text-left">Market Name</th>
-                <th class="py-2.5 px-3 text-center">Result</th>
-              </tr>
-            </thead>
-            <tbody id="chart-matrix-tbody">
-              <!-- Matrix rows populated dynamically -->
-            </tbody>
-          </table>
-        </div>
-
-      </div>
-    </div>
 
     <!-- TOAST NOTIFICATION CONTAINER -->
     <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-xs w-full pointer-events-none px-2"></div>

@@ -11,6 +11,7 @@ import {
   getPreviousIsoDateStr,
   fetchDailyResultsForDate,
   getISTDateTime,
+  executeAutoShiftIST,
   onServerStatusChange,
   setServerStatus,
   formatTodayDisplayNumber,
@@ -25,7 +26,6 @@ let allMarkets = [];
 let allResults = [];
 let filteredMarkets = [];
 let currentSearchQuery = '';
-let activeChartMarket = null;
 let isLoading = true;
 
 let selectedUserDateIso = getTodayIsoDateStr();
@@ -34,6 +34,8 @@ let cachedDateResults = new Map(); // dateIso -> Map(market_name -> result_numbe
 async function getDateResults(dateIso) {
   const normDate = extractIsoDate(dateIso) || dateIso;
   const resultMap = new Map();
+
+  if (!normDate) return resultMap;
 
   // First populate from allResults cache
   if (Array.isArray(allResults) && allResults.length > 0) {
@@ -101,7 +103,6 @@ export async function initApp() {
   setupRefreshButton();
   setupNetworkListeners();
   setupToastSystem();
-  setupRecordChartModal();
   setupUserDatePicker();
 
   // Listen to Server Status changes
@@ -161,12 +162,6 @@ export async function initApp() {
         }
       }
 
-      if (activeChartMarket) {
-        const monthSelect = document.getElementById('chart-month-select');
-        const selectedYearMonth = monthSelect ? monthSelect.value : 'ALL';
-        renderRecordChartHistory(activeChartMarket, selectedYearMonth, false, selectedRecordChartDate);
-      }
-
       applyFilterAndRender(true);
       return;
     }
@@ -192,14 +187,6 @@ export async function initApp() {
     } else if (eventType === 'DELETE') {
       allMarkets = allMarkets.filter(m => String(m.id) !== String(record.id));
       showToast('⚡ Live: Market removed!', 'info');
-    }
-
-    // Refresh active record chart modal if open for this market
-    if (activeChartMarket && (activeChartMarket.market_name === record.market_name || String(activeChartMarket.id) === String(record.id))) {
-      activeChartMarket = record;
-      const monthSelect = document.getElementById('chart-month-select');
-      const selectedYearMonth = monthSelect ? monthSelect.value : 'ALL';
-      renderRecordChartHistory(activeChartMarket, selectedYearMonth, false, selectedRecordChartDate);
     }
 
     // Re-render affected cards with updated sorting
@@ -229,17 +216,40 @@ async function loadMarketsData(showLoader = true) {
   const errorBox = document.getElementById('error-container');
   if (errorBox) errorBox.classList.add('hidden');
 
+  const emptyBox = document.getElementById('empty-container');
+  if (emptyBox) emptyBox.classList.add('hidden');
+
   try {
+    // Clear caches on explicit reload to guarantee fresh data
+    cachedDateResults.clear();
+    lastRenderedSnapshot = '';
+
     const [markets, historicalResults] = await Promise.all([
       fetchMarkets(),
       fetchAllResults()
     ]);
     allMarkets = markets || [];
     allResults = historicalResults || [];
+
+    // Evaluate IST daily auto-shifts (Gali at 1:00 AM IST, Disawer at 12:21 AM IST, Others at 12:00 AM IST)
+    try {
+      const shifted = await executeAutoShiftIST(allMarkets);
+      if (shifted) {
+        const [freshMarkets, freshResults] = await Promise.all([
+          fetchMarkets(),
+          fetchAllResults()
+        ]);
+        allMarkets = freshMarkets || [];
+        allResults = freshResults || [];
+      }
+    } catch (shiftErr) {
+      console.warn('Auto-shift check notice:', shiftErr);
+    }
+
     isLoading = false;
 
-    // Apply search filter and render
-    applyFilterAndRender();
+    // Apply search filter and force re-render
+    await applyFilterAndRender(true);
     updateConnectionBanner();
     updateActiveMarketsCount();
     startFooterClock();
@@ -301,62 +311,96 @@ function getUpcomingDiffMinutes(drawTimeStr) {
   return status.timeUntilDraw;
 }
 
-// Helper: Sort active markets with 20-minute post-draw bottom movement rule
-function sortMarketsByUpcoming(markets) {
+// Canonical display order requested by user for bottom market list:
+// 1. Delhi noon
+// 2. Punjab day
+// Helper: Canonical line-wise order
+function getCanonicalMarketRank(marketName) {
+  if (!marketName) return 999;
+  const name = marketName.trim().toLowerCase();
+
+  // 1. Delhi noon
+  if (name.includes('delhi noon') || name.includes('dehli noon') || name === 'delhi' || name.includes('delhi')) return 1;
+
+  // 2. Punjab day
+  if (name.includes('punjab day') || name.includes('punjab')) return 2;
+
+  // 4. New Faridabad (checked before Faridabad)
+  if (name.includes('new faridabad') || name.includes('new-faridabad')) return 4;
+
+  // 3. Faridabad
+  if (name.includes('faridabad')) return 3;
+
+  // 6. New Gaziabad / New Ghaziabad (checked before Gaziabad)
+  if (name.includes('new gaziabad') || name.includes('new ghaziabad') || name.includes('new-gaziabad')) return 6;
+
+  // 5. Gaziabad / Ghaziabad
+  if (name.includes('gaziabad') || name.includes('ghaziabad')) return 5;
+
+  // 7. Gali
+  if (name.includes('gali')) return 7;
+
+  // 8. Disawer / Disawar
+  if (name.includes('disawar') || name.includes('disawer')) return 8;
+
+  return 100;
+}
+
+// Sort all markets in the exact requested line-wise canonical order:
+// 1. Delhi noon
+// 2. Punjab day
+// 3. Faridabad
+// 4. New faridabad
+// 5. Gaziabad
+// 6. New gaziabad
+// 7. Gali
+// 8. Disawer
+function sortMarketsInCanonicalOrder(markets) {
+  const list = [...markets];
+  list.sort((a, b) => {
+    const rankA = getCanonicalMarketRank(a.market_name);
+    const rankB = getCanonicalMarketRank(b.market_name);
+
+    if (rankA !== rankB) {
+      return rankA - rankB;
+    }
+
+    // Fallback by draw time or alphabetical
+    const drawA = parseTimeToMinutes(a.draw_time);
+    const drawB = parseTimeToMinutes(b.draw_time);
+    if (drawA !== drawB) {
+      return drawA - drawB;
+    }
+
+    return (a.market_name || '').localeCompare(b.market_name || '');
+  });
+  return list;
+}
+
+// Find the single nearest upcoming or active drawing market for the top spotlight
+function findNearestActiveMarket(markets) {
+  if (!markets || markets.length === 0) return null;
   const { istMinutes: currentISTMinutes } = getISTDateTime();
 
-  const normalMarkets = [];
-  const bottomMarkets = [];
+  let latestMarket = null;
+  let highestPriority = Infinity;
 
   markets.forEach(m => {
     const status = getMarketTimeStatus(m.draw_time, currentISTMinutes);
-    if (status.isPassed20Min) {
-      bottomMarkets.push({ market: m, status });
+    let priority = 0;
+    if (status.timeSinceDraw < 20) {
+      priority = status.timeSinceDraw; // 0..19 (currently drawing / just drawn)
     } else {
-      normalMarkets.push({ market: m, status });
+      priority = 20 + status.timeUntilDraw; // nearest upcoming in future
+    }
+
+    if (priority < highestPriority) {
+      highestPriority = priority;
+      latestMarket = m;
     }
   });
 
-  // 1. Sort Normal Markets (markets that have NOT reached 20m post-draw threshold)
-  normalMarkets.sort((a, b) => {
-    const statusA = a.status;
-    const statusB = b.status;
-
-    let priorityA = 0;
-    if (statusA.timeSinceDraw < 20) {
-      priorityA = statusA.timeSinceDraw; // 0..19 (active / just drawn)
-    } else {
-      priorityA = 20 + statusA.timeUntilDraw; // upcoming in future
-    }
-
-    let priorityB = 0;
-    if (statusB.timeSinceDraw < 20) {
-      priorityB = statusB.timeSinceDraw;
-    } else {
-      priorityB = 20 + statusB.timeUntilDraw;
-    }
-
-    if (priorityA !== priorityB) {
-      return priorityA - priorityB;
-    }
-
-    return (a.market.market_name || '').localeCompare(b.market.market_name || '');
-  });
-
-  // 2. Sort Bottom Markets (markets that HAVE passed 20m post-draw threshold)
-  // Rule 7: "If multiple markets have passed their 20-minute threshold, keep those markets at the bottom
-  // and sort them consistently according to their upcoming draw time order (nearest upcoming first)."
-  bottomMarkets.sort((a, b) => {
-    if (a.status.timeUntilDraw !== b.status.timeUntilDraw) {
-      return a.status.timeUntilDraw - b.status.timeUntilDraw;
-    }
-    return (a.market.market_name || '').localeCompare(b.market.market_name || '');
-  });
-
-  return [
-    ...normalMarkets.map(item => item.market),
-    ...bottomMarkets.map(item => item.market)
-  ];
+  return latestMarket || markets[0];
 }
 
 // ----------------------------------------------------
@@ -375,6 +419,8 @@ function renderActiveMarketCard(market, dateResultsMap, prevDateResultsMap) {
 
   const todayIso = getTodayIsoDateStr();
   const isSelectedToday = (selectedUserDateIso === todayIso);
+
+  const prevUserDateIso = getPreviousIsoDateStr(selectedUserDateIso);
 
   // Result for selectedUserDateIso
   let todayVal = '--';
@@ -419,23 +465,23 @@ function renderActiveMarketCard(market, dateResultsMap, prevDateResultsMap) {
   const rightBoxLabel = isSelectedToday ? 'Today' : 'Result';
 
   wrapper.innerHTML = `
-    <div class="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 rounded-2xl p-0.5 shadow-sm relative overflow-hidden transition-all duration-300">
-      <div class="bg-slate-900 text-white rounded-[14px] p-3 sm:p-4 relative z-10">
+    <div class="bg-black text-white rounded-2xl p-4 sm:p-5 border-2 border-amber-400 shadow-xl relative overflow-hidden transition-all duration-300">
+      <div class="relative z-10">
         <div class="flex items-center justify-between gap-2 mb-2">
           <div class="flex items-center gap-1.5">
-            <span class="inline-flex items-center gap-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider">
-              <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+            <span class="inline-flex items-center gap-1.5 bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-xs">
+              <span class="w-1.5 h-1.5 rounded-full bg-slate-950 animate-ping"></span>
               🔥 Active Market
             </span>
           </div>
-          <span id="active-market-time-badge" class="text-[10px] font-black text-amber-300 bg-amber-950/80 px-2.5 py-0.5 rounded-md border border-amber-500/40 shadow-xs">
+          <span id="active-market-time-badge" class="text-[10px] font-black text-amber-300 bg-slate-900 px-2.5 py-0.5 rounded-md border border-amber-400/40 shadow-xs">
             ⏱️ ${timeText}
           </span>
         </div>
 
         <div class="space-y-3">
           <div class="flex items-center gap-2 flex-wrap">
-            <h2 class="text-lg sm:text-2xl font-black text-white tracking-tight truncate">
+            <h2 class="text-xl sm:text-2xl font-black text-white tracking-tight truncate">
               ${escapeHtml(market.market_name)}
             </h2>
           </div>
@@ -443,32 +489,36 @@ function renderActiveMarketCard(market, dateResultsMap, prevDateResultsMap) {
           <div class="flex items-center justify-between gap-3 flex-wrap">
             <!-- Left Column: Draw time & Record chart button -->
             <div class="flex flex-col items-start gap-1.5 text-xs text-slate-300">
-              <span class="bg-slate-800/90 text-amber-300 px-1.5 py-0.5 text-[10px] rounded border border-slate-700 font-medium leading-none">
-                Draw Time: <strong class="font-bold text-amber-400">${escapeHtml(market.draw_time || '')}</strong>
+              <span class="bg-slate-900 text-amber-300 px-2 py-0.5 text-[10px] rounded border border-slate-700 font-bold leading-none">
+                Draw Time: <strong class="text-amber-400 font-black">${escapeHtml(market.draw_time || '')}</strong>
               </span>
 
-              <button 
-                data-id="${market.id}" 
-                class="active-record-chart-btn inline-flex items-center gap-1 bg-amber-400 hover:bg-amber-300 text-slate-950 px-2 py-0.5 rounded text-[10px] font-black transition-all cursor-pointer shadow-xs"
+              <a 
+                href="${getRecordChartUrl(market)}" 
+                data-record-chart="true"
+                class="active-record-chart-btn no-pop no-popunder no-ad no-click-ad monetag-ignore inline-flex items-center gap-1 bg-amber-400 hover:bg-amber-300 text-slate-950 px-2.5 py-1 rounded-md text-[10px] font-black transition-all cursor-pointer shadow-xs"
               >
                 <span>📊 Record Chart</span>
-              </button>
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
             </div>
 
-            <!-- Right Column (In side of draw time & record chart): Two Result Boxes -->
+            <!-- Right Column: Two Result Boxes -->
             <div class="flex items-center gap-2.5 shrink-0">
               <!-- Left Box: Yesterday -->
-              <div class="flex flex-col items-center justify-center bg-slate-800/90 border border-slate-700 p-2 rounded-xl min-w-[68px] sm:min-w-[76px]">
+              <div class="flex flex-col items-center justify-center bg-slate-900 border border-slate-800 p-2 sm:p-2.5 rounded-xl min-w-[68px] sm:min-w-[76px]">
                 <span class="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">Yesterday</span>
-                <div class="w-13 sm:w-15 h-11 sm:h-13 bg-slate-700/90 text-slate-100 border border-slate-600 rounded-lg flex items-center justify-center font-mono font-black text-lg sm:text-xl shadow-inner">
+                <div class="w-13 sm:w-15 h-11 sm:h-13 bg-slate-800 text-slate-100 border border-slate-700 rounded-lg flex items-center justify-center font-mono font-black text-lg sm:text-xl shadow-inner">
                   ${shadowYesterdayVal}
                 </div>
               </div>
 
               <!-- Right Box: Today / Result -->
-              <div class="flex flex-col items-center justify-center bg-amber-950/80 border border-amber-500/50 border p-2 rounded-xl min-w-[68px] sm:min-w-[76px]">
-                <span class="text-[9px] font-black uppercase tracking-wider text-amber-400 mb-1">${rightBoxLabel}</span>
-                <div class="w-13 sm:w-15 h-11 sm:h-13 bg-amber-400 text-slate-950 border-amber-300 rounded-lg flex items-center justify-center font-mono font-black text-xl sm:text-2xl shadow-inner border">
+              <div class="flex flex-col items-center justify-center bg-amber-950/90 border border-amber-400/60 p-2 sm:p-2.5 rounded-xl min-w-[68px] sm:min-w-[76px]">
+                <span class="text-[9px] font-black uppercase tracking-wider text-amber-300 mb-1">${rightBoxLabel}</span>
+                <div class="w-13 sm:w-15 h-11 sm:h-13 bg-amber-400 text-slate-950 border border-amber-300 rounded-lg flex items-center justify-center font-mono font-black text-xl sm:text-2xl shadow-md">
                   ${todayVal}
                 </div>
               </div>
@@ -478,14 +528,6 @@ function renderActiveMarketCard(market, dateResultsMap, prevDateResultsMap) {
       </div>
     </div>
   `;
-
-  const chartBtn = wrapper.querySelector('.active-record-chart-btn');
-  if (chartBtn) {
-    chartBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      openRecordChartModal(market);
-    });
-  }
 }
 
 // Cache last rendered snapshot to prevent unnecessary DOM rebuilds & AdSense re-inits
@@ -512,28 +554,21 @@ async function applyFilterAndRender(force = false) {
   // Filter out hidden status markets for public users
   const visibleMarkets = allMarkets.filter(item => item.status !== 'Hidden');
 
-  // Sort all visible markets by nearest upcoming draw time
-  const sortedMarkets = sortMarketsByUpcoming(visibleMarkets);
+  // 1. Line-wise sorted list for bottom cards (Delhi noon, Punjab day, Faridabad, New faridabad, Gaziabad, New gaziabad, Gali, Disawer)
+  const canonicalMarkets = sortMarketsInCanonicalOrder(visibleMarkets);
 
-  let activeMarket = null;
-  let upcomingMarkets = [];
+  // 2. Active market for top spotlight (highlighted in black)
+  let activeMarket = findNearestActiveMarket(visibleMarkets);
+  let bottomMarkets = canonicalMarkets;
 
   if (query) {
-    const matched = sortedMarkets.filter(item => {
+    bottomMarkets = canonicalMarkets.filter(item => {
       const name = (item.market_name || '').toLowerCase();
       return name.includes(query);
     });
-    if (matched.length > 0) {
-      activeMarket = matched[0];
-      upcomingMarkets = matched.slice(1);
-    } else {
-      activeMarket = null;
-      upcomingMarkets = [];
-    }
-  } else {
-    if (sortedMarkets.length > 0) {
-      activeMarket = sortedMarkets[0];
-      upcomingMarkets = sortedMarkets.slice(1);
+    const activeMatches = bottomMarkets.some(m => activeMarket && String(m.id) === String(activeMarket.id));
+    if (!activeMatches) {
+      activeMarket = bottomMarkets.length > 0 ? bottomMarkets[0] : null;
     }
   }
 
@@ -541,8 +576,9 @@ async function applyFilterAndRender(force = false) {
   const currentSnapshot = JSON.stringify({
     query,
     date: selectedUserDateIso,
-    order: sortedMarkets.map(m => m.id),
-    res: sortedMarkets.map(m => [
+    order: bottomMarkets.map(m => m.id),
+    activeId: activeMarket ? activeMarket.id : null,
+    res: bottomMarkets.map(m => [
       m.id,
       m.today_number,
       m.yesterday_number,
@@ -576,7 +612,7 @@ async function applyFilterAndRender(force = false) {
 
   lastRenderedSnapshot = currentSnapshot;
 
-  // Render top active market section
+  // Render top active market section (black highlighted card)
   renderActiveMarketCard(activeMarket, dateResultsMap, prevDateResultsMap);
 
   // Update statistic counts & badges
@@ -591,11 +627,11 @@ async function applyFilterAndRender(force = false) {
     latestTimeEl.textContent = activeMarket ? activeMarket.draw_time : '--';
   }
   if (upcomingCountBadge) {
-    upcomingCountBadge.textContent = `${upcomingMarkets.length} Market${upcomingMarkets.length === 1 ? '' : 's'}`;
+    upcomingCountBadge.textContent = `${bottomMarkets.length} Market${bottomMarkets.length === 1 ? '' : 's'}`;
   }
 
-  // Render upcoming market cards
-  renderMarketCards(upcomingMarkets, dateResultsMap, prevDateResultsMap);
+  // Render line-wise market cards in white (includes all markets)
+  renderMarketCards(bottomMarkets, dateResultsMap, prevDateResultsMap);
 }
 
 // Render vertical stacked cards
@@ -632,16 +668,18 @@ function renderMarketCards(markets, dateResultsMap, prevDateResultsMap) {
 
   markets.forEach((market, index) => {
     const card = document.createElement('div');
-    const isYellow = Boolean(market.is_highlighted);
+    const isYellow = Boolean(market.highlighted_yellow || market.highlight_yellow);
 
+    // If highlighted_yellow is true in DB, render highlighted yellow card. Otherwise render standard white card.
     const cardBgClass = isYellow
-      ? 'bg-amber-50 border border-amber-200 shadow-sm hover:shadow-md'
-      : 'bg-white border border-gray-200 shadow-sm hover:shadow-md';
+      ? 'bg-amber-300 border-2 border-amber-500 shadow-md ring-1 ring-amber-400/60 hover:shadow-lg'
+      : 'bg-white border border-slate-200/90 shadow-xs hover:shadow-md';
+    const headerTextClass = 'text-lg sm:text-xl font-black text-slate-950';
 
-    const headerTextClass = 'text-xl font-black text-slate-900';
-
-    card.className = `market-card ${cardBgClass} rounded-2xl p-4 sm:p-5 transition-all duration-200 relative overflow-hidden shadow-xs hover:shadow-md`;
+    card.className = `market-card ${cardBgClass} rounded-2xl p-4 sm:p-5 transition-all duration-200 relative overflow-hidden`;
     card.style.animationDelay = `${index * 40}ms`;
+
+    const prevUserDateIso = getPreviousIsoDateStr(selectedUserDateIso);
 
     // Result for selectedUserDateIso
     let todayVal = '--';
@@ -668,53 +706,78 @@ function renderMarketCards(markets, dateResultsMap, prevDateResultsMap) {
     }
 
     const drawTime = escapeHtml(market.draw_time || '');
+    const stripColorClass = isYellow ? 'bg-amber-600' : 'bg-amber-400';
+    const drawTimeBadgeClass = isYellow
+      ? 'bg-amber-400/90 text-slate-950 px-1.5 py-0.5 text-[10px] rounded border border-amber-500 font-bold leading-none'
+      : 'bg-slate-100/90 px-1.5 py-0.5 text-[10px] rounded border border-slate-200 leading-none';
+    const chartBtnClass = isYellow
+      ? 'record-chart-link no-pop no-popunder no-ad no-click-ad monetag-ignore inline-flex items-center gap-1 text-[10px] font-black text-slate-950 hover:text-black bg-amber-200/90 hover:bg-amber-100 px-2 py-0.5 rounded border border-amber-500 transition-colors cursor-pointer'
+      : 'record-chart-link no-pop no-popunder no-ad no-click-ad monetag-ignore inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50/80 hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200/80 transition-colors cursor-pointer';
+
+    const yesterdayBoxClass = isYellow
+      ? 'flex flex-col items-center justify-center bg-amber-200/90 p-2 sm:p-2.5 rounded-xl border border-amber-400 min-w-[68px] sm:min-w-[78px]'
+      : 'flex flex-col items-center justify-center bg-slate-100/90 p-2 sm:p-2.5 rounded-xl border border-slate-200 min-w-[68px] sm:min-w-[78px]';
+    const yesterdayNumBoxClass = isYellow
+      ? 'w-13 sm:w-16 h-11 sm:h-14 bg-white border border-amber-400 text-slate-900 rounded-lg flex items-center justify-center font-mono font-black text-xl sm:text-2xl shadow-2xs'
+      : 'w-13 sm:w-16 h-11 sm:h-14 bg-white border border-slate-300 text-slate-800 rounded-lg flex items-center justify-center font-mono font-black text-xl sm:text-2xl shadow-2xs';
+
+    const todayBoxClass = isYellow
+      ? 'flex flex-col items-center justify-center bg-slate-950 p-2 sm:p-2.5 rounded-xl border border-amber-400 min-w-[68px] sm:min-w-[78px] shadow-xs'
+      : 'flex flex-col items-center justify-center bg-amber-100/80 p-2 sm:p-2.5 rounded-xl border border-amber-300 min-w-[68px] sm:min-w-[78px]';
+    const todayLabelClass = isYellow
+      ? 'text-[10px] font-black uppercase tracking-wider text-amber-300 mb-1'
+      : 'text-[10px] font-black uppercase tracking-wider text-amber-950 mb-1';
+    const todayNumBoxClass = isYellow
+      ? 'w-13 sm:w-16 h-11 sm:h-14 bg-slate-900 border border-slate-800 text-amber-300 rounded-lg flex items-center justify-center font-mono font-black text-2xl sm:text-3xl shadow-xs'
+      : 'w-13 sm:w-16 h-11 sm:h-14 bg-slate-900 border border-slate-800 text-amber-400 rounded-lg flex items-center justify-center font-mono font-black text-2xl sm:text-3xl border shadow-xs';
 
     card.innerHTML = `
-      ${!isYellow ? '<div class="absolute top-0 left-0 w-1.5 h-full bg-amber-400"></div>' : ''}
-      ${isYellow ? '<div class="absolute top-0 right-0 bg-amber-400 text-black text-[10px] font-extrabold px-2.5 py-0.5 rounded-bl-lg uppercase tracking-wider shadow-2xs">FEATURED</div>' : ''}
+      <div class="absolute top-0 left-0 w-1.5 h-full ${stripColorClass}"></div>
 
-      <div class="w-full ${!isYellow ? 'pl-2' : ''} space-y-3">
+      <div class="w-full pl-2 space-y-3">
         <!-- Title row -->
         <div class="flex items-center gap-2 flex-wrap">
           <h2 class="${headerTextClass} truncate">
             ${escapeHtml(market.market_name)}
           </h2>
+          ${isYellow ? `<span class="px-1.5 py-0.5 text-[9px] uppercase font-black bg-amber-400 text-slate-950 rounded-md border border-amber-500 shadow-xs">★ Highlighted</span>` : ''}
           ${market.status === 'Hidden' ? `<span class="px-2 py-0.5 text-[10px] uppercase font-extrabold bg-red-100 text-red-700 rounded-md">Hidden</span>` : ''}
         </div>
 
-        <!-- Row with Draw Time + Record Chart on Left, and Two Number Boxes right beside it on the Right -->
+        <!-- Row with Draw Time + Record Chart on Left, and Two Number Boxes on the Right -->
         <div class="flex items-center justify-between gap-3 flex-wrap">
           <!-- Left Column: Draw time & Record chart button -->
           <div class="flex flex-col items-start gap-1.5 text-xs font-medium text-slate-600">
-            <span class="bg-slate-100/90 px-1.5 py-0.5 text-[10px] rounded border border-slate-200 leading-none">
-              Draw Time: <strong class="text-slate-900 font-bold">${drawTime}</strong>
+            <span class="${drawTimeBadgeClass}">
+              Draw Time: <strong class="text-slate-950 font-bold">${drawTime}</strong>
             </span>
 
-            <button 
-              data-id="${market.id}" 
-              class="record-chart-link inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50/80 hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200/80 transition-colors cursor-pointer"
+            <a 
+              href="${getRecordChartUrl(market)}" 
+              data-record-chart="true"
+              class="${chartBtnClass}"
             >
               <span>📊 Record Chart</span>
               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
-            </button>
+            </a>
           </div>
 
           <!-- Right Side: Two Result Boxes -->
           <div class="flex items-center gap-2.5 shrink-0">
             <!-- Left Box: Yesterday's Number -->
-            <div class="flex flex-col items-center justify-center bg-slate-100/90 p-2 sm:p-2.5 rounded-xl border border-slate-200 min-w-[68px] sm:min-w-[78px]">
-              <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 mb-1">Yesterday</span>
-              <div class="w-13 sm:w-16 h-11 sm:h-14 bg-white border border-slate-300 text-slate-800 rounded-lg flex items-center justify-center font-mono font-black text-xl sm:text-2xl shadow-2xs">
+            <div class="${yesterdayBoxClass}">
+              <span class="text-[10px] font-extrabold uppercase tracking-wider ${isYellow ? 'text-slate-800' : 'text-slate-500'} mb-1">Yesterday</span>
+              <div class="${yesterdayNumBoxClass}">
                 ${yesterdayVal}
               </div>
             </div>
 
             <!-- Right Box: Result for Selected Date -->
-            <div class="flex flex-col items-center justify-center bg-amber-100/80 p-2 sm:p-2.5 rounded-xl border border-amber-300 min-w-[68px] sm:min-w-[78px]">
-              <span class="text-[10px] font-black uppercase tracking-wider text-amber-950 mb-1">${rightBoxLabel}</span>
-              <div class="w-13 sm:w-16 h-11 sm:h-14 ${isYellow ? 'bg-amber-400 border-amber-500 text-slate-950' : 'bg-slate-900 border-slate-800 text-amber-400'} rounded-lg flex items-center justify-center font-mono font-black text-2xl sm:text-3xl border shadow-xs">
+            <div class="${todayBoxClass}">
+              <span class="${todayLabelClass}">${rightBoxLabel}</span>
+              <div class="${todayNumBoxClass}">
                 ${todayVal}
               </div>
             </div>
@@ -724,19 +787,6 @@ function renderMarketCards(markets, dateResultsMap, prevDateResultsMap) {
     `;
 
     container.appendChild(card);
-  });
-
-  // Attach record chart link listeners
-  const chartLinks = container.querySelectorAll('.record-chart-link');
-  chartLinks.forEach(link => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
-      const id = link.getAttribute('data-id');
-      const market = allMarkets.find(m => String(m.id) === String(id));
-      if (market) {
-        openRecordChartModal(market);
-      }
-    });
   });
 }
 
@@ -873,11 +923,13 @@ function setupNavigation() {
   function openDrawer() {
     if (sideDrawer) sideDrawer.classList.remove('-translate-x-full');
     if (drawerOverlay) drawerOverlay.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
   }
 
   function closeDrawer() {
     if (sideDrawer) sideDrawer.classList.add('-translate-x-full');
     if (drawerOverlay) drawerOverlay.classList.add('hidden');
+    document.body.style.overflow = '';
   }
 
   if (hamburgerBtn) hamburgerBtn.addEventListener('click', openDrawer);
@@ -1067,408 +1119,22 @@ function updateConnectionBanner() {
   }
 }
 
-// Record Chart Modal Viewer
-function populateMonthDropdown(selectedYm) {
-  const monthSelect = document.getElementById('chart-month-select');
-  if (!monthSelect) return;
-
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth();
-
-  monthSelect.innerHTML = '';
-
-  // Only months for past 12 months (no "All History" option)
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(currentYear, currentMonth - i, 1);
-    const y = d.getFullYear();
-    const m = d.getMonth();
-    const ym = `${y}-${String(m + 1).padStart(2, '0')}`;
-
-    const opt = document.createElement('option');
-    opt.value = ym;
-    if (i === 0) {
-      opt.textContent = `📅 This Month (${monthNames[m]} ${y})`;
-    } else if (i === 1) {
-      opt.textContent = `📅 Previous Month (${monthNames[m]} ${y})`;
-    } else {
-      opt.textContent = `${monthNames[m]} ${y}`;
-    }
-    monthSelect.appendChild(opt);
+// Helper: Get record chart redirection URL for a market
+export function getRecordChartUrl(market) {
+  if (market) {
+    const params = new URLSearchParams();
+    if (market.market_name) params.set('market', market.market_name);
+    if (market.id) params.set('id', market.id);
+    return `/chart.html?${params.toString()}`;
   }
-
-  const currentYmStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
-  const targetVal = selectedYm || currentYmStr;
-
-  if (Array.from(monthSelect.options).some(o => o.value === targetVal)) {
-    monthSelect.value = targetVal;
-  } else if (monthSelect.options.length > 0) {
-    monthSelect.value = monthSelect.options[0].value;
-  }
-}
-
-let selectedRecordChartDate = getTodayIsoDateStr();
-
-function setupRecordChartModal() {
-  const modal = document.getElementById('record-chart-modal');
-  const closeBtn = document.getElementById('close-chart-modal-btn');
-  const monthSelect = document.getElementById('chart-month-select');
-  const dateInput = document.getElementById('chart-date-input');
-
-  if (closeBtn && modal) {
-    closeBtn.addEventListener('click', () => {
-      modal.classList.add('hidden');
-      modal.classList.remove('flex');
-    });
-  }
-
-  if (dateInput) {
-    dateInput.addEventListener('change', () => {
-      if (!dateInput.value) return;
-      selectedRecordChartDate = dateInput.value;
-      const targetYm = selectedRecordChartDate.substring(0, 7);
-      
-      if (monthSelect) {
-        populateMonthDropdown(targetYm);
-        monthSelect.value = targetYm;
-      }
-      
-      if (activeChartMarket) {
-        renderRecordChartHistory(activeChartMarket, targetYm, false, selectedRecordChartDate);
-      }
-    });
-  }
-
-  if (monthSelect) {
-    monthSelect.addEventListener('change', () => {
-      const ym = monthSelect.value;
-      if (ym !== 'ALL' && !selectedRecordChartDate.startsWith(ym)) {
-        selectedRecordChartDate = `${ym}-01`;
-        if (dateInput) dateInput.value = selectedRecordChartDate;
-      }
-      if (activeChartMarket) {
-        renderRecordChartHistory(activeChartMarket, ym, false, selectedRecordChartDate);
-      }
-    });
-  }
-}
-
-function openRecordChartModal(market) {
-  activeChartMarket = market;
-  const modal = document.getElementById('record-chart-modal');
-  const titleEl = document.getElementById('chart-market-title');
-  const timeEl = document.getElementById('chart-market-time');
-  const numbersEl = document.getElementById('chart-latest-numbers');
-  const externalLinkBtn = document.getElementById('chart-external-link');
-  const monthSelect = document.getElementById('chart-month-select');
-  const dateInput = document.getElementById('chart-date-input');
-
-  if (!modal) return;
-
-  if (!selectedRecordChartDate) {
-    selectedRecordChartDate = getTodayIsoDateStr();
-  }
-
-  if (dateInput) {
-    dateInput.value = selectedRecordChartDate;
-  }
-
-  if (titleEl) titleEl.textContent = `${market.market_name} Record Chart`;
-  if (timeEl) timeEl.textContent = `Result Time: ${market.draw_time}`;
-
-  const currentYm = selectedRecordChartDate ? selectedRecordChartDate.substring(0, 7) : getTodayIsoDateStr().substring(0, 7);
-
-  populateMonthDropdown(currentYm);
-
-  if (externalLinkBtn) {
-    if (market.record_chart_url && market.record_chart_url !== '#') {
-      externalLinkBtn.href = market.record_chart_url;
-      externalLinkBtn.target = '_blank';
-      externalLinkBtn.classList.remove('hidden');
-    } else {
-      externalLinkBtn.classList.add('hidden');
-    }
-  }
-
-  const selectedYearMonth = monthSelect && monthSelect.value ? monthSelect.value : currentYm;
-
-  renderRecordChartHistory(market, selectedYearMonth, false, selectedRecordChartDate);
-
-  modal.classList.remove('hidden');
-  modal.classList.add('flex');
-}
-
-function formatDateWithDay(dateIso) {
-  const cleanIso = extractIsoDate(dateIso);
-  if (!cleanIso || !/^\d{4}-\d{2}-\d{2}$/.test(cleanIso)) return dateIso || '';
-  const [y, m, d] = cleanIso.split('-');
-  const dateObj = new Date(Number(y), Number(m) - 1, Number(d));
-  const dayNamesShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const dayName = dayNamesShort[dateObj.getDay()] || '';
-
-  return `${d}-${m}-${y}${dayName ? ` (${dayName})` : ''}`;
-}
-
-let visibleRecordCount = 35;
-
-async function renderRecordChartHistory(market, yearMonth, isLoadMore = false, selectedDateIso = null) {
-  const tbody = document.getElementById('chart-matrix-tbody');
-  if (!tbody) return;
-
-  const activeDateIso = extractIsoDate(selectedDateIso || selectedRecordChartDate || getTodayIsoDateStr());
-
-  if (!isLoadMore) {
-    visibleRecordCount = 35;
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="3" class="py-8 text-center text-xs font-semibold text-slate-400 animate-pulse">
-          ⏳ Loading complete record chart history...
-        </td>
-      </tr>
-    `;
-  }
-
-  try {
-    const todayIso = getTodayIsoDateStr();
-    const currentYm = todayIso.substring(0, 7);
-    if (!yearMonth || yearMonth === 'ALL') {
-      yearMonth = selectedRecordChartDate ? selectedRecordChartDate.substring(0, 7) : currentYm;
-    }
-
-    const yesterdayIso = getPreviousIsoDateStr(todayIso);
-
-    const currentTodayVal = market.today_number !== undefined && market.today_number !== null ? market.today_number : market.first_number;
-    const currentYesterdayVal = market.yesterday_number !== undefined && market.yesterday_number !== null ? market.yesterday_number : market.second_number;
-
-    const numTodayVal = extractResultString(currentTodayVal);
-    const numYesterdayVal = extractResultString(currentYesterdayVal);
-
-    if (numTodayVal && numTodayVal !== 'XX') {
-      try {
-        await saveDailyResultRecord(market.market_name, todayIso, numTodayVal, market.id);
-      } catch (err) {
-        console.warn('Failed to save today daily result record:', err);
-      }
-    }
-    if (numYesterdayVal && numYesterdayVal !== '--' && numYesterdayVal !== 'XX') {
-      try {
-        await saveDailyResultRecord(market.market_name, yesterdayIso, numYesterdayVal, market.id);
-      } catch (err) {
-        console.warn('Failed to save yesterday daily result record:', err);
-      }
-    }
-
-    const marketId = market ? market.id : null;
-    const marketName = market ? market.market_name : '';
-
-    // Filter local allResults state by market_id (and market_name) and sort by result_date
-    const marketHistory = (allResults || [])
-      .filter(row => {
-        if (!row) return false;
-        // Primary key match: market.id === row.market_id
-        const idMatch = (marketId !== null && marketId !== undefined && row.market_id !== null && row.market_id !== undefined && String(row.market_id) === String(marketId));
-        // Fallback match by market_name if market_id is missing or null
-        const nameMatch = (marketName && row.market_name && row.market_name.trim().toLowerCase() === marketName.trim().toLowerCase());
-        return idMatch || nameMatch;
-      })
-      .sort((a, b) => {
-        const dateA = extractIsoDate(a.result_date) || String(a.result_date);
-        const dateB = extractIsoDate(b.result_date) || String(b.result_date);
-        return dateA.localeCompare(dateB);
-      });
-
-    console.log('MARKET HISTORY:', marketHistory);
-
-    // Fetch full history records from Supabase public.all_results table
-    const historyList = await fetchMarketHistory(market.market_name, yearMonth, market.id);
-
-    // Map keyed strictly by date (YYYY-MM-DD) to ensure single result per date and zero duplicates
-    const recordsByDate = new Map();
-
-    // Populate from local allResults filtered records
-    if (Array.isArray(marketHistory)) {
-      marketHistory.forEach(item => {
-        const itemDate = extractIsoDate(item.result_date);
-        const rawRes = (item.result !== undefined && item.result !== null) ? item.result : item.result_number;
-        const resVal = extractResultString(rawRes);
-        if (itemDate && resVal) {
-          if (yearMonth === 'ALL' || itemDate.startsWith(yearMonth)) {
-            recordsByDate.set(itemDate, resVal);
-          }
-        }
-      });
-    }
-
-    // Merge fresh fetchMarketHistory results
-    if (Array.isArray(historyList)) {
-      historyList.forEach(item => {
-        const itemDate = extractIsoDate(item.result_date);
-        const rawRes = (item.result !== undefined && item.result !== null) ? item.result : item.result_number;
-        const resVal = extractResultString(rawRes);
-        if (itemDate && resVal) {
-          if (yearMonth === 'ALL' || itemDate.startsWith(yearMonth)) {
-            recordsByDate.set(itemDate, resVal);
-          }
-        }
-      });
-    }
-
-    // Include yesterday's number if valid and not already present
-    if (numYesterdayVal && numYesterdayVal !== '--' && numYesterdayVal !== 'XX') {
-      if (yearMonth === 'ALL' || yesterdayIso.startsWith(yearMonth)) {
-        if (!recordsByDate.has(yesterdayIso)) {
-          recordsByDate.set(yesterdayIso, numYesterdayVal);
-        }
-      }
-    }
-
-    // Include today's number if valid and not already present
-    if (yearMonth === 'ALL' || todayIso.startsWith(yearMonth)) {
-      if (numTodayVal && numTodayVal !== 'XX') {
-        if (!recordsByDate.has(todayIso)) {
-          recordsByDate.set(todayIso, numTodayVal);
-        }
-      } else if (!recordsByDate.has(todayIso)) {
-        recordsByDate.set(todayIso, 'XX');
-      }
-    }
-
-    // Update result badge in chart modal header for the active selected date (e.g. Result (10-08-2026): 60)
-    const numbersEl = document.getElementById('chart-latest-numbers');
-    const activeDateResult = recordsByDate.get(activeDateIso) || 'XX';
-    const displayActiveDate = formatDbDateToDisplay(activeDateIso);
-    if (numbersEl) {
-      numbersEl.textContent = `Result (${displayActiveDate}): ${activeDateResult}`;
-    }
-
-    // Determine list of dates to render (ordered chronologically from 1 to 30 or 31)
-    let datesToRender = [];
-
-    // Single month: Generate dates ascending from day 1 to daysInMonth (1, 2, 3, ... 30 or 31)
-    const [yearNum, monthNum] = yearMonth.split('-').map(Number);
-    const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dayStr = String(day).padStart(2, '0');
-      datesToRender.push(`${yearMonth}-${dayStr}`);
-    }
-
-    if (!isLoadMore) {
-      tbody.innerHTML = '';
-    }
-
-    if (datesToRender.length === 0) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="3" class="py-8 text-center text-xs font-semibold text-slate-500">
-            No historical records found for ${escapeHtml(market.market_name)}.
-          </td>
-        </tr>
-      `;
-      return;
-    }
-
-    const itemsToShow = datesToRender.slice(0, visibleRecordCount);
-
-    tbody.innerHTML = '';
-
-    itemsToShow.forEach((dateIso, idx) => {
-      const isSelectedDate = (dateIso === activeDateIso);
-      const isToday = (dateIso === todayIso);
-      const resultVal = recordsByDate.get(dateIso) || 'XX';
-      const displayDateStr = formatDateWithDay(dateIso);
-
-      const tr = document.createElement('tr');
-      tr.className = isSelectedDate
-        ? 'bg-amber-100/95 font-black text-amber-950 border-2 border-amber-400 shadow-2xs'
-        : (isToday ? 'bg-amber-50 font-bold text-amber-900 border-b border-amber-200' : (idx % 2 === 0 ? 'bg-slate-50 border-b border-slate-200' : 'bg-white border-b border-slate-200'));
-
-      let resultHtml = '';
-      if (resultVal === 'XX') {
-        resultHtml = `<span class="font-mono font-bold text-slate-400">XX</span>`;
-      } else {
-        resultHtml = `<span class="inline-block bg-amber-400 text-slate-950 font-mono font-black px-3 py-0.5 rounded-lg border border-amber-500 shadow-2xs">${escapeHtml(String(resultVal))}</span>`;
-      }
-
-      let badgeHtml = '';
-      if (isSelectedDate) {
-        badgeHtml = `<span class="ml-1 text-[10px] text-amber-950 bg-amber-300 border border-amber-400 px-1.5 py-0.5 rounded font-black uppercase">Selected Date</span>`;
-      } else if (isToday) {
-        badgeHtml = `<span class="ml-1 text-[10px] text-amber-800 bg-amber-200 px-1.5 py-0.5 rounded font-black uppercase">Today</span>`;
-      }
-
-      tr.innerHTML = `
-        <td class="py-2.5 px-3 font-bold text-slate-800 text-xs sm:text-sm whitespace-nowrap">
-          ${displayDateStr} ${badgeHtml}
-        </td>
-        <td class="py-2.5 px-3 font-semibold text-slate-700 text-xs sm:text-sm whitespace-nowrap">
-          ${escapeHtml(market.market_name)}
-        </td>
-        <td class="py-2.5 px-3 font-bold text-center text-xs sm:text-sm whitespace-nowrap">
-          ${resultHtml}
-        </td>
-      `;
-
-      tbody.appendChild(tr);
-    });
-
-    // Check if pagination "Load More" button is needed
-    let loadMoreBtn = document.getElementById('chart-load-more-btn');
-    let container = document.getElementById('chart-pagination-container');
-
-    if (datesToRender.length > visibleRecordCount) {
-      if (!container) {
-        container = document.createElement('div');
-        container.id = 'chart-pagination-container';
-        container.className = 'mt-3 text-center py-2';
-        container.innerHTML = `
-          <button id="chart-load-more-btn" class="bg-slate-900 hover:bg-slate-800 text-amber-400 text-xs font-extrabold px-4 py-2 rounded-xl border border-slate-700 cursor-pointer transition-colors shadow-sm">
-            👇 Load More Historical Records (${datesToRender.length - visibleRecordCount} remaining)
-          </button>
-        `;
-        const modalBody = tbody.closest('.overflow-y-auto') || tbody.parentElement;
-        if (modalBody) modalBody.appendChild(container);
-        loadMoreBtn = document.getElementById('chart-load-more-btn');
-      } else {
-        container.classList.remove('hidden');
-        if (loadMoreBtn) {
-          loadMoreBtn.textContent = `👇 Load More Historical Records (${datesToRender.length - visibleRecordCount} remaining)`;
-        }
-      }
-
-      if (loadMoreBtn) {
-        loadMoreBtn.onclick = () => {
-          visibleRecordCount += 30;
-          renderRecordChartHistory(market, yearMonth, true, activeDateIso);
-        };
-      }
-    } else {
-      if (container) {
-        container.classList.add('hidden');
-      }
-    }
-
-  } catch (error) {
-    console.error('Error rendering record chart history:', error);
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="3" class="py-6 text-center text-xs font-semibold text-rose-500">
-          ⚠️ Unable to load history records. Please try again.
-        </td>
-      </tr>
-    `;
-  }
+  return '/chart.html';
 }
 
 // ----------------------------------------------------
 // IST AUTOMATIC DAILY SHIFT TICKER
 // Exact rules:
 // - Normal Markets: 12:00 AM IST
-// - Gali: 12:20 AM IST
+// - Gali: 01:00 AM IST
 // - Disawer: 12:21 AM IST
 // ----------------------------------------------------
 // IST AUTOMATIC DISPLAY TICKER
@@ -1478,14 +1144,27 @@ let autoShiftTickerInterval = null;
 function startAutoShiftTicker() {
   if (autoShiftTickerInterval) return;
 
-  function checkAndRender() {
+  async function checkAndRender() {
     if (!isLoading && allMarkets && allMarkets.length > 0) {
+      try {
+        const shifted = await executeAutoShiftIST(allMarkets);
+        if (shifted) {
+          const [freshMarkets, freshResults] = await Promise.all([
+            fetchMarkets(),
+            fetchAllResults()
+          ]);
+          allMarkets = freshMarkets || [];
+          allResults = freshResults || [];
+        }
+      } catch (e) {
+        // ignore
+      }
       applyFilterAndRender();
     }
   }
 
-  // Periodically refresh sorting order as 20-min draw thresholds pass
-  autoShiftTickerInterval = setInterval(checkAndRender, 10000);
+  // Periodically refresh sorting order as 20-min draw thresholds pass and evaluate daily shifts
+  autoShiftTickerInterval = setInterval(checkAndRender, 15000);
 }
 
 // Toast Notifications System
