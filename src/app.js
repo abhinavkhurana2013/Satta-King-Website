@@ -311,50 +311,56 @@ function getUpcomingDiffMinutes(drawTimeStr) {
   return status.timeUntilDraw;
 }
 
-// Canonical display order requested by user for bottom market list:
-// 1. Delhi noon
-// 2. Punjab day
+// Canonical display order requested by user for line-wise market list:
+// 1. Disawer (moved from last to top under highlighted market card)
+// 2. Delhi noon
+// 3. Punjab day
+// 4. Faridabad
+// 5. New faridabad
+// 6. Gaziabad
+// 7. New gaziabad
+// 8. Gali
 // Helper: Canonical line-wise order
 function getCanonicalMarketRank(marketName) {
   if (!marketName) return 999;
   const name = marketName.trim().toLowerCase();
 
-  // 1. Delhi noon
-  if (name.includes('delhi noon') || name.includes('dehli noon') || name === 'delhi' || name.includes('delhi')) return 1;
+  // 1. Disawer / Disawar (Moved from last to top under highlighted card)
+  if (name.includes('disawar') || name.includes('disawer')) return 1;
 
-  // 2. Punjab day
-  if (name.includes('punjab day') || name.includes('punjab')) return 2;
+  // 2. Delhi noon
+  if (name.includes('delhi noon') || name.includes('dehli noon') || name === 'delhi' || name.includes('delhi')) return 2;
 
-  // 4. New Faridabad (checked before Faridabad)
-  if (name.includes('new faridabad') || name.includes('new-faridabad')) return 4;
+  // 3. Punjab day
+  if (name.includes('punjab day') || name.includes('punjab')) return 3;
 
-  // 3. Faridabad
-  if (name.includes('faridabad')) return 3;
+  // 5. New Faridabad (checked before Faridabad)
+  if (name.includes('new faridabad') || name.includes('new-faridabad')) return 5;
 
-  // 6. New Gaziabad / New Ghaziabad (checked before Gaziabad)
-  if (name.includes('new gaziabad') || name.includes('new ghaziabad') || name.includes('new-gaziabad')) return 6;
+  // 4. Faridabad
+  if (name.includes('faridabad')) return 4;
 
-  // 5. Gaziabad / Ghaziabad
-  if (name.includes('gaziabad') || name.includes('ghaziabad')) return 5;
+  // 7. New Gaziabad / New Ghaziabad (checked before Gaziabad)
+  if (name.includes('new gaziabad') || name.includes('new ghaziabad') || name.includes('new-gaziabad')) return 7;
 
-  // 7. Gali
-  if (name.includes('gali')) return 7;
+  // 6. Gaziabad / Ghaziabad
+  if (name.includes('gaziabad') || name.includes('ghaziabad')) return 6;
 
-  // 8. Disawer / Disawar
-  if (name.includes('disawar') || name.includes('disawer')) return 8;
+  // 8. Gali
+  if (name.includes('gali')) return 8;
 
   return 100;
 }
 
 // Sort all markets in the exact requested line-wise canonical order:
-// 1. Delhi noon
-// 2. Punjab day
-// 3. Faridabad
-// 4. New faridabad
-// 5. Gaziabad
-// 6. New gaziabad
-// 7. Gali
-// 8. Disawer
+// 1. Disawer
+// 2. Delhi noon
+// 3. Punjab day
+// 4. Faridabad
+// 5. New faridabad
+// 6. Gaziabad
+// 7. New gaziabad
+// 8. Gali
 function sortMarketsInCanonicalOrder(markets) {
   const list = [...markets];
   list.sort((a, b) => {
@@ -377,160 +383,11 @@ function sortMarketsInCanonicalOrder(markets) {
   return list;
 }
 
-// Find the single nearest upcoming or active drawing market for the top spotlight
-function findNearestActiveMarket(markets) {
-  if (!markets || markets.length === 0) return null;
-  const { istMinutes: currentISTMinutes } = getISTDateTime();
-
-  let latestMarket = null;
-  let highestPriority = Infinity;
-
-  markets.forEach(m => {
-    const status = getMarketTimeStatus(m.draw_time, currentISTMinutes);
-    let priority = 0;
-    if (status.timeSinceDraw < 20) {
-      priority = status.timeSinceDraw; // 0..19 (currently drawing / just drawn)
-    } else {
-      priority = 20 + status.timeUntilDraw; // nearest upcoming in future
-    }
-
-    if (priority < highestPriority) {
-      highestPriority = priority;
-      latestMarket = m;
-    }
-  });
-
-  return latestMarket || markets[0];
-}
-
 // ----------------------------------------------------
 // Market Render Helpers
 // ----------------------------------------------------
 
-// Render 🔥 Active Market Section
-function renderActiveMarketCard(market, dateResultsMap, prevDateResultsMap) {
-  const wrapper = document.getElementById('active-market-wrapper');
-  if (!wrapper) return;
-
-  if (!market) {
-    wrapper.innerHTML = '';
-    return;
-  }
-
-  const todayIso = getTodayIsoDateStr();
-  const isSelectedToday = (selectedUserDateIso === todayIso);
-
-  const prevUserDateIso = getPreviousIsoDateStr(selectedUserDateIso);
-
-  // Result for selectedUserDateIso
-  let todayVal = '--';
-  if (dateResultsMap && dateResultsMap.has(market.market_name)) {
-    todayVal = escapeHtml(formatDisplayNumber(dateResultsMap.get(market.market_name)));
-  } else if (isSelectedToday) {
-    todayVal = escapeHtml(
-      formatTodayDisplayNumber(market.today_number !== undefined ? market.today_number : market.first_number)
-    );
-  } else {
-    todayVal = 'XX';
-  }
-
-  // Result for prevUserDateIso
-  let shadowYesterdayVal = '--';
-  if (prevDateResultsMap && prevDateResultsMap.has(market.market_name)) {
-    shadowYesterdayVal = escapeHtml(formatDisplayNumber(prevDateResultsMap.get(market.market_name)));
-  } else if (isSelectedToday) {
-    shadowYesterdayVal = escapeHtml(
-      formatYesterdayDisplayNumber(market.yesterday_number !== undefined ? market.yesterday_number : market.second_number)
-    );
-  } else {
-    shadowYesterdayVal = '--';
-  }
-
-  const { istMinutes } = getISTDateTime();
-  const timeStatus = getMarketTimeStatus(market.draw_time, istMinutes);
-  let timeText = '';
-
-  if (timeStatus.timeSinceDraw === 0) {
-    timeText = 'Drawing Now!';
-  } else if (timeStatus.timeSinceDraw < 20) {
-    timeText = 'Drawing Now!';
-  } else if (timeStatus.timeUntilDraw < 60) {
-    timeText = `In ${timeStatus.timeUntilDraw} min${timeStatus.timeUntilDraw === 1 ? '' : 's'}`;
-  } else {
-    const hrs = Math.floor(timeStatus.timeUntilDraw / 60);
-    const mins = timeStatus.timeUntilDraw % 60;
-    timeText = `In ${hrs}h ${mins}m`;
-  }
-
-  const rightBoxLabel = isSelectedToday ? 'Today' : 'Result';
-
-  wrapper.innerHTML = `
-    <div class="bg-black text-white rounded-2xl p-4 sm:p-5 border-2 border-amber-400 shadow-xl relative overflow-hidden transition-all duration-300">
-      <div class="relative z-10">
-        <div class="flex items-center justify-between gap-2 mb-2">
-          <div class="flex items-center gap-1.5">
-            <span class="inline-flex items-center gap-1.5 bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-xs">
-              <span class="w-1.5 h-1.5 rounded-full bg-slate-950 animate-ping"></span>
-              🔥 Active Market
-            </span>
-          </div>
-          <span id="active-market-time-badge" class="text-[10px] font-black text-amber-300 bg-slate-900 px-2.5 py-0.5 rounded-md border border-amber-400/40 shadow-xs">
-            ⏱️ ${timeText}
-          </span>
-        </div>
-
-        <div class="space-y-3">
-          <div class="flex items-center gap-2 flex-wrap">
-            <h2 class="text-xl sm:text-2xl font-black text-white tracking-tight truncate">
-              ${escapeHtml(market.market_name)}
-            </h2>
-          </div>
-
-          <div class="flex items-center justify-between gap-3 flex-wrap">
-            <!-- Left Column: Draw time & Record chart button -->
-            <div class="flex flex-col items-start gap-1.5 text-xs text-slate-300">
-              <span class="bg-slate-900 text-amber-300 px-2 py-0.5 text-[10px] rounded border border-slate-700 font-bold leading-none">
-                Draw Time: <strong class="text-amber-400 font-black">${escapeHtml(market.draw_time || '')}</strong>
-              </span>
-
-              <a 
-                href="${getRecordChartUrl(market)}" 
-                data-record-chart="true"
-                class="active-record-chart-btn no-pop no-popunder no-ad no-click-ad monetag-ignore inline-flex items-center gap-1 bg-amber-400 hover:bg-amber-300 text-slate-950 px-2.5 py-1 rounded-md text-[10px] font-black transition-all cursor-pointer shadow-xs"
-              >
-                <span>📊 Record Chart</span>
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </a>
-            </div>
-
-            <!-- Right Column: Two Result Boxes -->
-            <div class="flex items-center gap-2.5 shrink-0">
-              <!-- Left Box: Yesterday -->
-              <div class="flex flex-col items-center justify-center bg-slate-900 border border-slate-800 p-2 sm:p-2.5 rounded-xl min-w-[68px] sm:min-w-[76px]">
-                <span class="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">Yesterday</span>
-                <div class="w-13 sm:w-15 h-11 sm:h-13 bg-slate-800 text-slate-100 border border-slate-700 rounded-lg flex items-center justify-center font-mono font-black text-lg sm:text-xl shadow-inner">
-                  ${shadowYesterdayVal}
-                </div>
-              </div>
-
-              <!-- Right Box: Today / Result -->
-              <div class="flex flex-col items-center justify-center bg-amber-950/90 border border-amber-400/60 p-2 sm:p-2.5 rounded-xl min-w-[68px] sm:min-w-[76px]">
-                <span class="text-[9px] font-black uppercase tracking-wider text-amber-300 mb-1">${rightBoxLabel}</span>
-                <div class="w-13 sm:w-15 h-11 sm:h-13 bg-amber-400 text-slate-950 border border-amber-300 rounded-lg flex items-center justify-center font-mono font-black text-xl sm:text-2xl shadow-md">
-                  ${todayVal}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-// Cache last rendered snapshot to prevent unnecessary DOM rebuilds & AdSense re-inits
+// Cache last rendered snapshot to prevent unnecessary DOM rebuilds
 let lastRenderedSnapshot = '';
 
 // Filter & Sort markets based on status, upcoming time & search query
@@ -554,31 +411,23 @@ async function applyFilterAndRender(force = false) {
   // Filter out hidden status markets for public users
   const visibleMarkets = allMarkets.filter(item => item.status !== 'Hidden');
 
-  // 1. Line-wise sorted list for bottom cards (Delhi noon, Punjab day, Faridabad, New faridabad, Gaziabad, New gaziabad, Gali, Disawer)
+  // Line-wise sorted list for cards (Disawer at top, Delhi noon, Punjab day, Faridabad, New faridabad, Gaziabad, New gaziabad, Gali)
   const canonicalMarkets = sortMarketsInCanonicalOrder(visibleMarkets);
-
-  // 2. Active market for top spotlight (highlighted in black)
-  let activeMarket = findNearestActiveMarket(visibleMarkets);
-  let bottomMarkets = canonicalMarkets;
+  let displayMarkets = canonicalMarkets;
 
   if (query) {
-    bottomMarkets = canonicalMarkets.filter(item => {
+    displayMarkets = canonicalMarkets.filter(item => {
       const name = (item.market_name || '').toLowerCase();
       return name.includes(query);
     });
-    const activeMatches = bottomMarkets.some(m => activeMarket && String(m.id) === String(activeMarket.id));
-    if (!activeMatches) {
-      activeMarket = bottomMarkets.length > 0 ? bottomMarkets[0] : null;
-    }
   }
 
   // Generate current render snapshot
   const currentSnapshot = JSON.stringify({
     query,
     date: selectedUserDateIso,
-    order: bottomMarkets.map(m => m.id),
-    activeId: activeMarket ? activeMarket.id : null,
-    res: bottomMarkets.map(m => [
+    order: displayMarkets.map(m => m.id),
+    res: displayMarkets.map(m => [
       m.id,
       m.today_number,
       m.yesterday_number,
@@ -589,49 +438,29 @@ async function applyFilterAndRender(force = false) {
     ])
   });
 
-  // If nothing changed structurally or in data, only update active market countdown badge without tearing down AdSense ads
   if (!force && currentSnapshot === lastRenderedSnapshot) {
-    if (activeMarket) {
-      const { istMinutes } = getISTDateTime();
-      const timeStatus = getMarketTimeStatus(activeMarket.draw_time, istMinutes);
-      let timeText = '';
-      if (timeStatus.timeSinceDraw === 0 || timeStatus.timeSinceDraw < 20) {
-        timeText = 'Drawing Now!';
-      } else if (timeStatus.timeUntilDraw < 60) {
-        timeText = `In ${timeStatus.timeUntilDraw} min${timeStatus.timeUntilDraw === 1 ? '' : 's'}`;
-      } else {
-        const hrs = Math.floor(timeStatus.timeUntilDraw / 60);
-        const mins = timeStatus.timeUntilDraw % 60;
-        timeText = `In ${hrs}h ${mins}m`;
-      }
-      const timeBadge = document.getElementById('active-market-time-badge');
-      if (timeBadge) timeBadge.textContent = `⏱️ ${timeText}`;
-    }
     return;
   }
 
   lastRenderedSnapshot = currentSnapshot;
 
-  // Render top active market section (black highlighted card)
-  renderActiveMarketCard(activeMarket, dateResultsMap, prevDateResultsMap);
+  // Ensure active market wrapper is cleared if leftover in DOM
+  const activeWrapper = document.getElementById('active-market-wrapper');
+  if (activeWrapper) activeWrapper.innerHTML = '';
 
   // Update statistic counts & badges
   const activeCountEl = document.getElementById('stat-total-markets');
   const activeMarketsCountEl = document.getElementById('active-markets-count');
-  const latestTimeEl = document.getElementById('stat-latest-time');
   const upcomingCountBadge = document.getElementById('upcoming-count-badge');
 
   if (activeCountEl) activeCountEl.textContent = visibleMarkets.length;
   if (activeMarketsCountEl) activeMarketsCountEl.textContent = visibleMarkets.length;
-  if (latestTimeEl) {
-    latestTimeEl.textContent = activeMarket ? activeMarket.draw_time : '--';
-  }
   if (upcomingCountBadge) {
-    upcomingCountBadge.textContent = `${bottomMarkets.length} Market${bottomMarkets.length === 1 ? '' : 's'}`;
+    upcomingCountBadge.textContent = `${displayMarkets.length} Market${displayMarkets.length === 1 ? '' : 's'}`;
   }
 
   // Render line-wise market cards in white (includes all markets)
-  renderMarketCards(bottomMarkets, dateResultsMap, prevDateResultsMap);
+  renderMarketCards(displayMarkets, dateResultsMap, prevDateResultsMap);
 }
 
 // Render vertical stacked cards
