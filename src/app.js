@@ -461,6 +461,9 @@ async function applyFilterAndRender(force = false) {
 
   // Render line-wise market cards in white (includes all markets)
   renderMarketCards(displayMarkets, dateResultsMap, prevDateResultsMap);
+
+  // Update dedicated New Ghaziabad spotlight widget on homepage
+  updateNewGhaziabadHomeWidget(dateResultsMap, prevDateResultsMap);
 }
 
 // Render vertical stacked cards
@@ -619,6 +622,61 @@ function renderMarketCards(markets, dateResultsMap, prevDateResultsMap) {
   });
 }
 
+// Helper: Check if a market name corresponds to New Ghaziabad
+export function isNewGhaziabadMarket(name) {
+  if (!name) return false;
+  const n = String(name).trim().toLowerCase();
+  return (n.includes('new') && (n.includes('gaziabad') || n.includes('ghaziabad')));
+}
+
+// Update the homepage dedicated New Ghaziabad result section dynamically from Supabase data
+function updateNewGhaziabadHomeWidget(dateResultsMap, prevDateResultsMap) {
+  const todayBox = document.getElementById('home-ng-today-num');
+  const yestBox = document.getElementById('home-ng-yesterday-num');
+  const timeBadge = document.getElementById('home-ng-draw-time');
+  const statusBadge = document.getElementById('home-ng-status-badge');
+
+  if (!todayBox || !yestBox) return;
+
+  const ngMarket = allMarkets.find(m => isNewGhaziabadMarket(m.market_name));
+
+  if (ngMarket) {
+    if (timeBadge && ngMarket.draw_time) {
+      timeBadge.textContent = ngMarket.draw_time;
+    }
+
+    const todayIso = getTodayIsoDateStr();
+    const prevIso = getPreviousIsoDateStr(todayIso);
+
+    let todayVal = '--';
+    if (dateResultsMap && dateResultsMap.has(ngMarket.market_name)) {
+      todayVal = formatDisplayNumber(dateResultsMap.get(ngMarket.market_name));
+    } else if (ngMarket.today_number !== undefined && ngMarket.today_number !== null) {
+      todayVal = formatTodayDisplayNumber(ngMarket.today_number);
+    }
+
+    let yestVal = '--';
+    if (prevDateResultsMap && prevDateResultsMap.has(ngMarket.market_name)) {
+      yestVal = formatDisplayNumber(prevDateResultsMap.get(ngMarket.market_name));
+    } else if (ngMarket.yesterday_number !== undefined && ngMarket.yesterday_number !== null) {
+      yestVal = formatYesterdayDisplayNumber(ngMarket.yesterday_number);
+    }
+
+    todayBox.textContent = todayVal;
+    yestBox.textContent = yestVal;
+
+    if (statusBadge) {
+      if (todayVal && todayVal !== 'XX' && todayVal !== '--') {
+        statusBadge.textContent = '🟢 Result Announced';
+        statusBadge.className = 'text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300';
+      } else {
+        statusBadge.textContent = '⏳ Result Expected at ' + (ngMarket.draw_time || '09:45 PM');
+        statusBadge.className = 'text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300';
+      }
+    }
+  }
+}
+
 // Render Skeleton Loading Placeholders
 function renderSkeletonLoaders() {
   const container = document.getElementById('markets-container');
@@ -727,7 +785,7 @@ function setupRefreshButton() {
 }
 
 const PAGE_TITLES = {
-  home: 'Satta King – Latest Market Results & Updates',
+  home: 'New Ghaziabad Satta Result Today | New Ghaziabad Chart',
   about: 'About Satta King – Live Market Results & Records Information',
   contact: 'Contact Us – Satta King Help & Support',
   privacy: 'Privacy Policy – Satta King',
@@ -735,7 +793,7 @@ const PAGE_TITLES = {
 };
 
 const PAGE_DESCRIPTIONS = {
-  home: 'Satta King – Live market results and record charts updated in real time.',
+  home: 'New Ghaziabad Satta Result Today, live result, New Ghaziabad chart, record chart and previous results. Check the latest New Ghaziabad results and charts.',
   about: 'Learn about Satta King, our live market results platform, historical chart data, and market draw timing schedules.',
   contact: 'Get in touch with Satta King for technical support, feedback, and general inquiries.',
   privacy: 'Read the Satta King Privacy Policy regarding user privacy, cookies, data collection, and security.',
@@ -948,13 +1006,26 @@ function updateConnectionBanner() {
   }
 }
 
+// Helper: Generate clean URL slug for a market (e.g. "DEHLI NOON" -> "dehli-noon")
+export function getMarketSlug(marketName) {
+  if (!marketName) return '';
+  return String(marketName)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 // Helper: Get record chart redirection URL for a market
 export function getRecordChartUrl(market) {
   if (market) {
-    const params = new URLSearchParams();
-    if (market.market_name) params.set('market', market.market_name);
-    if (market.id) params.set('id', market.id);
-    return `/chart.html?${params.toString()}`;
+    const slug = getMarketSlug(market.market_name);
+    if (slug) {
+      return `/${slug}`;
+    }
+    if (market.id) {
+      return `/chart.html?id=${encodeURIComponent(market.id)}`;
+    }
   }
   return '/chart.html';
 }

@@ -1,4 +1,24 @@
 {
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/new-ghaziabad", "destination": "/new-ghaziabad.html" },
+    { "source": "/new-ghaziabad.html", "destination": "/new-ghaziabad.html" },
+    { "source": "/chart", "destination": "/chart.html" },
+    { "source": "/chart.html", "destination": "/chart.html" },
+    { "source": "/disawer", "destination": "/chart.html" },
+    { "source": "/disawar", "destination": "/chart.html" },
+    { "source": "/delhi-noon", "destination": "/chart.html" },
+    { "source": "/dehli-noon", "destination": "/chart.html" },
+    { "source": "/punjab-day", "destination": "/chart.html" },
+    { "source": "/faridabad", "destination": "/chart.html" },
+    { "source": "/new-faridabad", "destination": "/chart.html" },
+    { "source": "/gaziabad", "destination": "/chart.html" },
+    { "source": "/ghaziabad", "destination": "/chart.html" },
+    { "source": "/new-gaziabad", "destination": "/chart.html" },
+    { "source": "/new-ghaziabad-chart", "destination": "/chart.html" },
+    { "source": "/gali", "destination": "/chart.html" },
+    { "source": "/:slug((?!api|assets|src|sw\\.js|favicon\\.ico|OneSignalSDKWorker\\.js|manifest\\.json|robots\\.txt|sitemap\\.xml).+)", "destination": "/chart.html" }
+  ],
   "headers": [
     {
       "source": "/OneSignalSDKWorker.js",

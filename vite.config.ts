@@ -5,7 +5,36 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'market-chart-rewrite',
+        configureServer(server) {
+          server.middlewares.use((req, _res, next) => {
+            const rawUrl = req.url || '';
+            const pathOnly = rawUrl.split('?')[0];
+            if (
+              pathOnly &&
+              pathOnly !== '/' &&
+              pathOnly !== '/index.html' &&
+              pathOnly !== '/chart.html' &&
+              pathOnly !== '/new-ghaziabad.html' &&
+              !pathOnly.startsWith('/src') &&
+              !pathOnly.startsWith('/@') &&
+              !pathOnly.startsWith('/node_modules') &&
+              !pathOnly.startsWith('/assets') &&
+              !pathOnly.startsWith('/public') &&
+              !pathOnly.includes('.')
+            ) {
+              const query = rawUrl.includes('?') ? rawUrl.substring(rawUrl.indexOf('?')) : '';
+              req.url = '/chart.html' + query;
+            }
+            next();
+          });
+        }
+      }
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
@@ -16,6 +45,7 @@ export default defineConfig(() => {
         input: {
           main: path.resolve(__dirname, 'index.html'),
           chart: path.resolve(__dirname, 'chart.html'),
+          newGhaziabad: path.resolve(__dirname, 'new-ghaziabad.html'),
         },
       },
     },

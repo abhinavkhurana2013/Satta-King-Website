@@ -523,20 +523,90 @@ function updateViewTabButtons() {
   }
 }
 
+// Helper: Generate clean URL slug for a market (e.g. "DEHLI NOON" -> "dehli-noon")
+export function getMarketSlug(marketName) {
+  if (!marketName) return '';
+  return String(marketName)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+// Helper: Match market from either pathname (e.g. /disawer) or query params
+export function findMarketFromPathOrQuery(markets, pathname, queryMarketName, queryMarketId) {
+  if (!markets || markets.length === 0) return null;
+
+  if (queryMarketId) {
+    const found = markets.find(m => String(m.id) === String(queryMarketId));
+    if (found) return found;
+  }
+
+  let pathSlug = '';
+  if (pathname && pathname !== '/' && pathname !== '/chart.html' && pathname !== '/chart') {
+    const cleanPath = pathname.replace(/^\/+|\/+$/g, '').replace(/\.html$/i, '');
+    if (cleanPath.startsWith('chart/')) {
+      pathSlug = cleanPath.substring(6);
+    } else {
+      pathSlug = cleanPath;
+    }
+  }
+
+  const rawCandidate = (pathSlug || queryMarketName || '').trim();
+  if (!rawCandidate) return null;
+
+  const decoded = decodeURIComponent(rawCandidate).trim().toLowerCase();
+  const normalizedCandidateSlug = decoded.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const strippedCandidate = decoded.replace(/[^a-z0-9]/g, '');
+
+  // Exact or slug match
+  for (const m of markets) {
+    if (!m.market_name) continue;
+    const nameLower = m.market_name.trim().toLowerCase();
+    const marketSlug = nameLower.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    const marketStripped = nameLower.replace(/[^a-z0-9]/g, '');
+
+    if (nameLower === decoded || marketSlug === normalizedCandidateSlug || marketStripped === strippedCandidate) {
+      return m;
+    }
+  }
+
+  // Synonym / fuzzy match:
+  // e.g. "delhi" vs "dehli", "ghaziabad" vs "gaziabad", "disawar" vs "disawer"
+  for (const m of markets) {
+    if (!m.market_name) continue;
+    const nameLower = m.market_name.trim().toLowerCase();
+
+    // Ghaziabad / Gaziabad
+    const candG = strippedCandidate.replace(/ghaziabad/g, 'gaziabad');
+    const mG = nameLower.replace(/[^a-z0-9]/g, '').replace(/ghaziabad/g, 'gaziabad');
+    if (candG && candG === mG) return m;
+
+    // Delhi / Dehli
+    const candD = strippedCandidate.replace(/dehli/g, 'delhi');
+    const mD = nameLower.replace(/[^a-z0-9]/g, '').replace(/dehli/g, 'delhi');
+    if (candD && candD === mD) return m;
+
+    // Disawer / Disawar
+    const candDis = strippedCandidate.replace(/disawar/g, 'disawer');
+    const mDis = nameLower.replace(/[^a-z0-9]/g, '').replace(/disawar/g, 'disawer');
+    if (candDis && candDis === mDis) return m;
+  }
+
+  return null;
+}
+
 // Select Market Helper
 function selectMarket(market) {
   currentMarket = market;
   currentViewMode = market ? 'single' : 'matrix';
 
-  const newUrl = new URL(window.location.href);
   if (market) {
-    newUrl.searchParams.set('market', market.market_name);
-    newUrl.searchParams.set('id', market.id);
+    const slug = getMarketSlug(market.market_name);
+    window.history.pushState({}, '', `/${slug}`);
   } else {
-    newUrl.searchParams.delete('market');
-    newUrl.searchParams.delete('id');
+    window.history.pushState({}, '', '/chart.html');
   }
-  window.history.pushState({}, '', newUrl);
 
   visibleDateCount = 40;
   renderCurrentView();
@@ -557,29 +627,17 @@ function setupEventListeners() {
   // Mode Tabs
   if (matrixTabBtn) {
     matrixTabBtn.addEventListener('click', () => {
-      currentViewMode = 'matrix';
-      currentMarket = null;
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.delete('market');
-      newUrl.searchParams.delete('id');
-      window.history.pushState({}, '', newUrl);
-      renderCurrentView();
+      selectMarket(null);
     });
   }
 
   if (singleTabBtn) {
     singleTabBtn.addEventListener('click', () => {
-      currentViewMode = 'single';
       if (!currentMarket && allMarkets.length > 0) {
-        currentMarket = allMarkets[0];
+        selectMarket(allMarkets[0]);
+      } else if (currentMarket) {
+        selectMarket(currentMarket);
       }
-      if (currentMarket) {
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.set('market', currentMarket.market_name);
-        newUrl.searchParams.set('id', currentMarket.id);
-        window.history.pushState({}, '', newUrl);
-      }
-      renderCurrentView();
     });
   }
 
@@ -778,14 +836,17 @@ export async function initChartPage() {
       marketSelect.innerHTML = optionsHtml;
     }
 
-    // Determine initial view mode
-    if (targetMarketId) {
-      currentMarket = allMarkets.find(m => String(m.id) === String(targetMarketId)) || null;
-      if (currentMarket) currentViewMode = 'single';
-    } else if (targetMarketName) {
-      const searchName = decodeURIComponent(targetMarketName).trim().toLowerCase();
-      currentMarket = allMarkets.find(m => m.market_name && m.market_name.trim().toLowerCase() === searchName) || null;
-      if (currentMarket) currentViewMode = 'single';
+    // Determine initial view mode from pathname (e.g. /disawer) or query params
+    const matchedMarket = findMarketFromPathOrQuery(
+      allMarkets,
+      window.location.pathname,
+      targetMarketName,
+      targetMarketId
+    );
+
+    if (matchedMarket) {
+      currentMarket = matchedMarket;
+      currentViewMode = 'single';
     } else {
       currentViewMode = 'matrix';
       currentMarket = null;
