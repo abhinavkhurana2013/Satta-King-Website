@@ -1024,10 +1024,10 @@ export function getRecordChartUrl(market) {
       return `/${slug}`;
     }
     if (market.id) {
-      return `/chart.html?id=${encodeURIComponent(market.id)}`;
+      return `/chart?id=${encodeURIComponent(market.id)}`;
     }
   }
-  return '/chart.html';
+  return '/chart';
 }
 
 // ----------------------------------------------------

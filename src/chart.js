@@ -597,15 +597,17 @@ export function findMarketFromPathOrQuery(markets, pathname, queryMarketName, qu
 }
 
 // Select Market Helper
-function selectMarket(market) {
+function selectMarket(market, updateHistory = true) {
   currentMarket = market;
   currentViewMode = market ? 'single' : 'matrix';
 
-  if (market) {
-    const slug = getMarketSlug(market.market_name);
-    window.history.pushState({}, '', `/${slug}`);
-  } else {
-    window.history.pushState({}, '', '/chart.html');
+  if (updateHistory) {
+    if (market) {
+      const slug = getMarketSlug(market.market_name);
+      window.history.pushState({}, '', `/${slug}`);
+    } else {
+      window.history.pushState({}, '', '/chart');
+    }
   }
 
   visibleDateCount = 40;
@@ -744,6 +746,40 @@ function setupEventListeners() {
   window.addEventListener('online', updateOnlineStatus);
   window.addEventListener('offline', updateOnlineStatus);
   updateOnlineStatus();
+
+  // Browser Navigation Back/Forward
+  window.addEventListener('popstate', () => {
+    const params = new URLSearchParams(window.location.search);
+    const matched = findMarketFromPathOrQuery(
+      allMarkets,
+      window.location.pathname,
+      params.get('market'),
+      params.get('id')
+    );
+    selectMarket(matched, false);
+  });
+
+  // Handle Quick Market Link clicks without full refresh when staying on chart
+  document.querySelectorAll('a[href^="/"]').forEach(a => {
+    const href = a.getAttribute('href');
+    if (!href || href.startsWith('/#') || href === '/' || href.includes('.js') || href.includes('.css')) return;
+    if (href.startsWith('/new-ghaziabad.html')) return;
+
+    a.addEventListener('click', (e) => {
+      // If clicking chart link while on chart page
+      if (href === '/chart' || href === '/chart.html') {
+        e.preventDefault();
+        selectMarket(null);
+      } else {
+        const cleanSlug = href.replace(/^\/+|\/+$/g, '');
+        const found = findMarketFromPathOrQuery(allMarkets, href, cleanSlug, null);
+        if (found) {
+          e.preventDefault();
+          selectMarket(found);
+        }
+      }
+    });
+  });
 
   if (retryBtn) {
     retryBtn.addEventListener('click', () => {
