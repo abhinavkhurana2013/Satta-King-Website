@@ -785,19 +785,19 @@ function setupRefreshButton() {
 }
 
 const PAGE_TITLES = {
-  home: 'New Ghaziabad Satta Result Today | New Ghaziabad Chart',
-  about: 'About Satta King – Live Market Results & Records Information',
-  contact: 'Contact Us – Satta King Help & Support',
-  privacy: 'Privacy Policy – Satta King',
-  terms: 'Terms & Conditions – Satta King'
+  home: '[SATTAKINGFAST]',
+  about: 'About – [SATTAKINGFAST] Live Market Results & Records Information',
+  contact: 'Contact Us – [SATTAKINGFAST] Help & Support',
+  privacy: 'Privacy Policy – [SATTAKINGFAST]',
+  terms: 'Terms & Conditions – [SATTAKINGFAST]'
 };
 
 const PAGE_DESCRIPTIONS = {
-  home: 'New Ghaziabad Satta Result Today, live result, New Ghaziabad chart, record chart and previous results. Check the latest New Ghaziabad results and charts.',
-  about: 'Learn about Satta King, our live market results platform, historical chart data, and market draw timing schedules.',
-  contact: 'Get in touch with Satta King for technical support, feedback, and general inquiries.',
-  privacy: 'Read the Satta King Privacy Policy regarding user privacy, cookies, data collection, and security.',
-  terms: 'Read the Satta King Terms & Conditions governing website usage, disclaimer, and guidelines.'
+  home: '[SATTAKINGFAST] - Live Satta King results, fast result charts, New Ghaziabad, Disawer, Faridabad, Gaziabad, Gali record charts updated in real-time.',
+  about: 'Learn about [SATTAKINGFAST], our live market results platform, historical chart data, and market draw timing schedules.',
+  contact: 'Get in touch with [SATTAKINGFAST] for technical support, feedback, and general inquiries.',
+  privacy: 'Read the [SATTAKINGFAST] Privacy Policy regarding user privacy, cookies, data collection, and security.',
+  terms: 'Read the [SATTAKINGFAST] Terms & Conditions governing website usage, disclaimer, and guidelines.'
 };
 
 // Page Navigation & Contact Form

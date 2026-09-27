@@ -15,64 +15,64 @@ export const MARKETS = [
     aliases: ['disawar'],
     name: 'Disawer',
     drawTime: '05:15 AM',
-    title: 'Disawer Chart 2026 – Disawer Satta King Record Chart',
-    desc: 'Check Disawer Chart today, Disawer Satta King live record chart, monthly results, and previous results updated in real-time.'
+    title: 'Disawer Chart 2026 – [SATTAKINGFAST]',
+    desc: 'Check Disawer Chart today, [SATTAKINGFAST] live record chart, monthly results, and previous results updated in real-time.'
   },
   {
     slug: 'dehli-noon',
     aliases: ['delhi-noon'],
     name: 'Dehli Noon',
     drawTime: '03:15 PM',
-    title: 'Dehli Noon Chart 2026 – Dehli Noon Satta King Record Chart',
-    desc: 'Check Dehli Noon Chart today, Dehli Noon Satta King live record chart, monthly results, and previous results updated in real-time.'
+    title: 'Dehli Noon Chart 2026 – [SATTAKINGFAST]',
+    desc: 'Check Dehli Noon Chart today, [SATTAKINGFAST] live record chart, monthly results, and previous results updated in real-time.'
   },
   {
     slug: 'punjab-day',
     aliases: [],
     name: 'Punjab Day',
     drawTime: '05:15 PM',
-    title: 'Punjab Day Chart 2026 – Punjab Day Satta King Record Chart',
-    desc: 'Check Punjab Day Chart today, Punjab Day Satta King live record chart, monthly results, and previous results updated in real-time.'
+    title: 'Punjab Day Chart 2026 – [SATTAKINGFAST]',
+    desc: 'Check Punjab Day Chart today, [SATTAKINGFAST] live record chart, monthly results, and previous results updated in real-time.'
   },
   {
     slug: 'faridabad',
     aliases: [],
     name: 'Faridabad',
     drawTime: '06:15 PM',
-    title: 'Faridabad Chart 2026 – Faridabad Satta King Record Chart',
-    desc: 'Check Faridabad Chart today, Faridabad Satta King live record chart, monthly results, and previous results updated in real-time.'
+    title: 'Faridabad Chart 2026 – [SATTAKINGFAST]',
+    desc: 'Check Faridabad Chart today, [SATTAKINGFAST] live record chart, monthly results, and previous results updated in real-time.'
   },
   {
     slug: 'new-faridabad',
     aliases: [],
     name: 'New Faridabad',
     drawTime: '07:15 PM',
-    title: 'New Faridabad Chart 2026 – New Faridabad Satta King Record Chart',
-    desc: 'Check New Faridabad Chart today, New Faridabad Satta King live record chart, monthly results, and previous results updated in real-time.'
+    title: 'New Faridabad Chart 2026 – [SATTAKINGFAST]',
+    desc: 'Check New Faridabad Chart today, [SATTAKINGFAST] live record chart, monthly results, and previous results updated in real-time.'
   },
   {
     slug: 'gaziabad',
     aliases: ['ghaziabad'],
     name: 'Gaziabad',
     drawTime: '08:45 PM',
-    title: 'Gaziabad Chart 2026 – Gaziabad Satta King Record Chart',
-    desc: 'Check Gaziabad Chart today, Gaziabad Satta King live record chart, monthly results, and previous results updated in real-time.'
+    title: 'Gaziabad Chart 2026 – [SATTAKINGFAST]',
+    desc: 'Check Gaziabad Chart today, [SATTAKINGFAST] live record chart, monthly results, and previous results updated in real-time.'
   },
   {
     slug: 'new-gaziabad',
     aliases: ['new-ghaziabad-chart'],
     name: 'New Gaziabad',
     drawTime: '09:30 PM',
-    title: 'New Gaziabad Chart 2026 – New Gaziabad Satta King Record Chart',
-    desc: 'Check New Gaziabad Chart today, New Gaziabad Satta King live record chart, monthly results, and previous results updated in real-time.'
+    title: 'New Gaziabad Chart 2026 – [SATTAKINGFAST]',
+    desc: 'Check New Gaziabad Chart today, [SATTAKINGFAST] live record chart, monthly results, and previous results updated in real-time.'
   },
   {
     slug: 'gali',
     aliases: [],
     name: 'Gali',
     drawTime: '11:45 PM',
-    title: 'Gali Chart 2026 – Gali Satta King Record Chart',
-    desc: 'Check Gali Chart today, Gali Satta King live record chart, monthly results, and previous results updated in real-time.'
+    title: 'Gali Chart 2026 – [SATTAKINGFAST]',
+    desc: 'Check Gali Chart today, [SATTAKINGFAST] live record chart, monthly results, and previous results updated in real-time.'
   }
 ];
 

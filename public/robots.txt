@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /admin
 
-Sitemap: https://sattaking.vercel.app/sitemap.xml
+Sitemap: https://sattakingfast.vercel.app/sitemap.xml

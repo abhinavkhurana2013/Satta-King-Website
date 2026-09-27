@@ -203,14 +203,14 @@ function renderHeaderCard() {
   if (currentMarket) {
     // Single market mode
     const title = `${currentMarket.market_name} Record Chart`;
-    document.title = `${title} – Satta King Live Results`;
+    document.title = `${title} – [SATTAKINGFAST]`;
 
     if (pageTitleEl) pageTitleEl.textContent = title;
     if (drawTimeEl) drawTimeEl.textContent = `Daily Draw Time: ${currentMarket.draw_time || '--'}`;
     if (marketSelect) marketSelect.value = String(currentMarket.id);
   } else {
     // All markets matrix mode
-    document.title = `All Markets Record Chart – Satta King Live Results`;
+    document.title = `All Markets Record Chart – [SATTAKINGFAST]`;
     if (pageTitleEl) pageTitleEl.textContent = 'All Markets Record Chart';
     if (drawTimeEl) drawTimeEl.textContent = 'Showing complete winning results for all game markets';
     if (marketSelect) marketSelect.value = 'ALL';
