@@ -14,6 +14,18 @@ import {
   onServerStatusChange,
   setServerStatus
 } from './supabase.js';
+import {
+  checkAndNotifyResultUpdate,
+  isSubscribedToMarket,
+  toggleMarketSubscription,
+  onNotificationChange
+} from './notifications.js';
+import {
+  initNotificationUI,
+  updateKnownMarkets,
+  setNotificationToastHandler,
+  updateAlertsBadge
+} from './notifications-ui.js';
 
 // Month names and Day names
 const MONTH_NAMES = [
@@ -133,6 +145,33 @@ function renderTodayLiveCard() {
 
   const drawTime = ngMarket?.draw_time || '09:45 PM';
   if (drawTimeEl) drawTimeEl.textContent = drawTime;
+
+  // Update New Ghaziabad alert button state
+  const alertBtn = document.getElementById('ng-alert-optin-btn');
+  const alertBtnText = document.getElementById('ng-alert-optin-text');
+  if (alertBtn && alertBtnText) {
+    const isSub = isSubscribedToMarket('New Ghaziabad') || isSubscribedToMarket('New Gaziabad');
+    if (isSub) {
+      alertBtn.className = 'inline-flex items-center gap-1.5 text-xs font-black uppercase px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 border border-amber-500 shadow-sm transition-all cursor-pointer';
+      alertBtnText.textContent = 'Alert ON';
+    } else {
+      alertBtn.className = 'inline-flex items-center gap-1.5 text-xs font-black uppercase px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 border border-slate-700 shadow-sm transition-all cursor-pointer';
+      alertBtnText.textContent = 'Get Result Alert';
+    }
+
+    if (!alertBtn.dataset.listenerAttached) {
+      alertBtn.dataset.listenerAttached = 'true';
+      alertBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        alertBtn.disabled = true;
+        const res = await toggleMarketSubscription('New Ghaziabad');
+        showToast(res.message, res.success ? (res.subscribed ? 'success' : 'info') : 'error');
+        updateAlertsBadge();
+        renderTodayLiveCard();
+        alertBtn.disabled = false;
+      });
+    }
+  }
 
   if (statusBadgeEl) {
     if (todayVal && todayVal !== 'XX' && todayVal !== '--') {
@@ -542,6 +581,7 @@ async function loadData() {
     // Filter results for New Ghaziabad
     ngResults = allResults.filter(r => isNewGhaziabadMarket(r.market_name));
 
+    updateKnownMarkets(allMarkets);
     populateMonthDropdown();
     renderAllSections();
     setServerStatus('online');
@@ -576,11 +616,19 @@ function setupRealtime() {
           } else {
             ngResults.unshift(item);
           }
+
+          if (resStr && resStr !== 'XX' && resStr !== '--') {
+            checkAndNotifyResultUpdate(record.market_name || 'New Ghaziabad', resStr, ngMarket?.draw_time, normDate);
+          }
         }
         renderAllSections();
         showToast('⚡ Live update: New Ghaziabad result updated!', 'success');
       } else if (table === 'results' && record && isNewGhaziabadMarket(record.market_name)) {
         ngMarket = record;
+        const todayStr = extractResultString(record.today_number);
+        if (todayStr && todayStr !== 'XX' && todayStr !== '--') {
+          checkAndNotifyResultUpdate(record.market_name || 'New Ghaziabad', todayStr, record.draw_time, getTodayIsoDateStr());
+        }
         renderAllSections();
       }
     }
@@ -588,6 +636,12 @@ function setupRealtime() {
 }
 
 export async function initNewGhaziabadPage() {
+  setNotificationToastHandler((msg, type) => showToast(msg, type));
+  initNotificationUI(allMarkets);
+  onNotificationChange(() => {
+    renderTodayLiveCard();
+    updateAlertsBadge();
+  });
   setupEvents();
   setupRealtime();
   await loadData();

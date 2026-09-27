@@ -10,6 +10,18 @@ import {
   formatDbDateToDisplay,
   onRealtimeChange
 } from './supabase.js';
+import {
+  initNotificationUI,
+  updateKnownMarkets,
+  updateAlertsBadge,
+  setNotificationToastHandler
+} from './notifications-ui.js';
+import {
+  checkAndNotifyResultUpdate,
+  isSubscribedToMarket,
+  toggleMarketSubscription,
+  onNotificationChange
+} from './notifications.js';
 
 const nowInitial = new Date();
 const initialCurrentYM = `${nowInitial.getFullYear()}-${String(nowInitial.getMonth() + 1).padStart(2, '0')}`;
@@ -489,10 +501,54 @@ function renderSingleMarketView() {
   }
 }
 
+// Render Alert Opt-in Control for Current Market on Chart Page
+function renderMarketAlertControl() {
+  const container = document.getElementById('chart-market-alert-container');
+  if (!container) return;
+
+  if (currentViewMode !== 'single' || !currentMarket || !currentMarket.market_name) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const marketName = currentMarket.market_name;
+  const isSub = isSubscribedToMarket(marketName);
+
+  container.innerHTML = `
+    <button 
+      id="chart-current-market-alert-btn"
+      type="button"
+      title="${isSub ? `Alerts enabled for ${escapeHtml(marketName)}. Click to turn off.` : `Get alerts when ${escapeHtml(marketName)} result is declared.`}"
+      class="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all cursor-pointer shadow-sm ${
+        isSub 
+          ? 'bg-amber-400 hover:bg-amber-500 text-slate-950 border border-amber-500' 
+          : 'bg-slate-900 hover:bg-slate-800 text-amber-300 border border-slate-700'
+      }"
+    >
+      <span>🔔</span>
+      <span>${isSub ? 'Alert ON' : `Get Alert for ${escapeHtml(marketName)}`}</span>
+    </button>
+  `;
+
+  const btn = document.getElementById('chart-current-market-alert-btn');
+  if (btn) {
+    btn.onclick = async (e) => {
+      e.preventDefault();
+      btn.disabled = true;
+      const res = await toggleMarketSubscription(marketName);
+      showToast(res.message, res.success ? (res.subscribed ? 'success' : 'info') : 'error');
+      updateAlertsBadge();
+      renderMarketAlertControl();
+      btn.disabled = false;
+    };
+  }
+}
+
 // Master Render Dispatcher
 function renderCurrentView() {
   renderHeaderCard();
   updateViewTabButtons();
+  renderMarketAlertControl();
 
   if (currentViewMode === 'single' && currentMarket) {
     renderSingleMarketView();
@@ -820,6 +876,10 @@ function setupEventListeners() {
           allResults.unshift(normalizedItem);
         }
 
+        if (resStr && resStr !== 'XX' && resStr !== '--') {
+          checkAndNotifyResultUpdate(rec.market_name, resStr, rec.draw_time, normDate);
+        }
+
         populateMonthDropdown();
         renderCurrentView();
         showToast(`⚡ New record received for ${rec.market_name}: ${resStr}`, 'info');
@@ -834,6 +894,13 @@ function setupEventListeners() {
       if (currentMarket && String(currentMarket.id) === String(rec.id)) {
         currentMarket = rec;
       }
+
+      const todayStr = extractResultString(rec.today_number);
+      if (todayStr && todayStr !== 'XX' && todayStr !== '--') {
+        checkAndNotifyResultUpdate(rec.market_name, todayStr, rec.draw_time, getTodayIsoDateStr());
+      }
+
+      updateKnownMarkets(allMarkets);
       renderCurrentView();
     }
   });
@@ -841,6 +908,13 @@ function setupEventListeners() {
 
 // Initialize Record Chart Page
 export async function initChartPage() {
+  setNotificationToastHandler((msg, type) => showToast(msg, type));
+  initNotificationUI(allMarkets);
+  onNotificationChange(() => {
+    renderMarketAlertControl();
+    updateAlertsBadge();
+  });
+
   // Parse URL query params
   const urlParams = new URLSearchParams(window.location.search);
   const targetMarketName = urlParams.get('market');
@@ -861,6 +935,8 @@ export async function initChartPage() {
 
     allMarkets = markets || [];
     allResults = historicalResults || [];
+
+    updateKnownMarkets(allMarkets);
 
     // Populate Market Selector Dropdown
     const marketSelect = document.getElementById('market-select');

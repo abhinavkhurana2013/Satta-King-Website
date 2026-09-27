@@ -86,6 +86,16 @@
 
         <!-- Right: Quick Navigation -->
         <div class="flex items-center gap-1.5 sm:gap-2">
+          <!-- Notification Alerts Opt-in Bell -->
+          <button 
+            id="open-alerts-btn" 
+            title="Real-Time Result Alerts" 
+            aria-label="Real-Time Result Alerts"
+            class="relative inline-flex items-center gap-1 text-[11px] sm:text-xs font-black uppercase tracking-wider bg-amber-500 hover:bg-amber-600 text-slate-950 px-2.5 py-1.5 rounded-xl border border-amber-600 shadow-xs transition-colors cursor-pointer"
+          >
+            <span>🔔</span> <span class="hidden xs:inline">Alerts</span>
+            <span id="alerts-badge" class="hidden absolute -top-1.5 -right-1.5 bg-rose-600 text-white text-[10px] font-black rounded-full h-4 min-w-[16px] px-1 flex items-center justify-center border-2 border-white shadow-xs">0</span>
+          </button>
           <a href="/new-ghaziabad.html" class="inline-flex items-center gap-1 text-[11px] sm:text-xs font-black uppercase tracking-wider bg-slate-950 text-amber-300 hover:bg-slate-900 px-2.5 py-1.5 rounded-xl border border-slate-800 shadow-xs transition-colors">
             <span>🎯</span> <span class="hidden xs:inline">New Ghaziabad</span>
           </a>
@@ -237,6 +247,16 @@
                 <a href="/new-gaziabad" data-record-chart="true" class="no-pop no-popunder no-ad no-click-ad monetag-ignore inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 px-2 py-1 rounded-lg border border-blue-200 transition-colors">
                   <span>📊 View Chart</span>
                 </a>
+                <button 
+                  id="home-ng-alert-btn" 
+                  type="button"
+                  data-market-name="New Ghaziabad" 
+                  class="market-card-alert-btn inline-flex items-center gap-1 text-[11px] font-black uppercase bg-slate-900 hover:bg-slate-800 text-amber-300 px-2.5 py-1 rounded-lg border border-slate-700 shadow-2xs transition-colors cursor-pointer"
+                  title="Toggle alerts for New Ghaziabad"
+                >
+                  <span>🔔</span>
+                  <span id="home-ng-alert-btn-text">Get Alert</span>
+                </button>
               </div>
             </div>
 
@@ -432,6 +452,16 @@
           <span class="text-amber-400 text-base">📊</span>
           <span>Record Charts</span>
         </a>
+        <button 
+          id="drawer-alerts-btn"
+          class="w-full flex items-center justify-between px-4 py-2.5 rounded-xl hover:bg-slate-800 text-amber-300 font-bold text-sm transition-colors text-left cursor-pointer"
+        >
+          <div class="flex items-center gap-3.5">
+            <span class="text-amber-400 text-base">🔔</span>
+            <span>Market Result Alerts</span>
+          </div>
+          <span id="drawer-alerts-badge" class="hidden bg-rose-600 text-white text-[10px] font-black rounded-full h-4 min-w-[16px] px-1 flex items-center justify-center">0</span>
+        </button>
       </nav>
 
       <!-- Drawer Footer -->

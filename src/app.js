@@ -21,6 +21,20 @@ import {
   extractIsoDate,
   formatDbDateToDisplay
 } from './supabase.js';
+import {
+  checkAndNotifyResultUpdate,
+  isSubscribedToMarket,
+  toggleMarketSubscription,
+  onNotificationChange
+} from './notifications.js';
+import {
+  initNotificationUI,
+  updateKnownMarkets,
+  getCardAlertButtonHtml,
+  attachCardAlertListeners,
+  setNotificationToastHandler,
+  updateAlertsBadge
+} from './notifications-ui.js';
 
 let allMarkets = [];
 let allResults = [];
@@ -30,6 +44,34 @@ let isLoading = true;
 
 let selectedUserDateIso = getTodayIsoDateStr();
 let cachedDateResults = new Map(); // dateIso -> Map(market_name -> result_number)
+let knownTodayResultsMap = new Map(); // market_name -> declared_number
+
+function checkAndTriggerAnnouncements(marketsList, dateResultsMap) {
+  if (!Array.isArray(marketsList)) return;
+  const todayIso = getTodayIsoDateStr();
+  marketsList.forEach(m => {
+    const marketName = m.market_name;
+    let declaredNum = null;
+    if (dateResultsMap && dateResultsMap.has(marketName)) {
+      declaredNum = extractResultString(dateResultsMap.get(marketName));
+    } else {
+      const raw = m.today_number !== undefined ? m.today_number : m.first_number;
+      declaredNum = extractResultString(raw);
+    }
+
+    if (declaredNum && declaredNum !== 'XX' && declaredNum !== '--') {
+      if (knownTodayResultsMap.has(marketName)) {
+        const prev = knownTodayResultsMap.get(marketName);
+        if (!prev || prev === 'XX' || prev === '--' || prev !== declaredNum) {
+          checkAndNotifyResultUpdate(marketName, declaredNum, m.draw_time, todayIso);
+        }
+      }
+      knownTodayResultsMap.set(marketName, declaredNum);
+    } else if (!knownTodayResultsMap.has(marketName)) {
+      knownTodayResultsMap.set(marketName, null);
+    }
+  });
+}
 
 async function getDateResults(dateIso) {
   const normDate = extractIsoDate(dateIso) || dateIso;
@@ -105,6 +147,15 @@ export async function initApp() {
   setupToastSystem();
   setupUserDatePicker();
 
+  // Setup Notification System
+  setNotificationToastHandler(showToast);
+  initNotificationUI(allMarkets);
+  setupNewGhaziabadAlertBtn();
+  onNotificationChange(() => {
+    updateAlertsBadge();
+    applyFilterAndRender(true);
+  });
+
   // Listen to Server Status changes
   onServerStatusChange((status) => {
     updateServerStatusBanner(status);
@@ -121,6 +172,11 @@ export async function initApp() {
         const rawRes = (record.result !== undefined && record.result !== null) ? record.result : record.result_number;
         const resStr = extractResultString(rawRes) || 'XX';
         const recordId = record.id;
+
+        // Check if real-time web notification should be sent
+        if (normDate === getTodayIsoDateStr() && resStr !== 'XX' && resStr !== '--') {
+          checkAndNotifyResultUpdate(record.market_name, resStr, record.draw_time, normDate);
+        }
 
         if (eventType === 'DELETE') {
           allResults = allResults.filter(r => String(r.id) !== String(recordId));
@@ -176,20 +232,35 @@ export async function initApp() {
         allMarkets.push(record);
       }
       showToast(`⚡ Live: New market "${record.market_name}" added!`, 'info');
+
+      // Check if new declared result
+      const newToday = extractResultString(record.today_number !== undefined ? record.today_number : record.first_number);
+      if (newToday && newToday !== 'XX' && newToday !== '--') {
+        checkAndNotifyResultUpdate(record.market_name, newToday, record.draw_time, getTodayIsoDateStr());
+      }
     } else if (eventType === 'UPDATE') {
       const idx = allMarkets.findIndex(m => String(m.id) === String(record.id));
+      const oldMarket = idx !== -1 ? allMarkets[idx] : null;
       if (idx !== -1) {
         allMarkets[idx] = record;
       } else {
         allMarkets.push(record);
       }
       showToast(`⚡ Live: Market "${record.market_name}" updated!`, 'info');
+
+      // Check if new declared result
+      const newToday = extractResultString(record.today_number !== undefined ? record.today_number : record.first_number);
+      const oldToday = oldMarket ? extractResultString(oldMarket.today_number !== undefined ? oldMarket.today_number : oldMarket.first_number) : null;
+      if (newToday && newToday !== 'XX' && newToday !== '--' && (!oldToday || oldToday === 'XX' || oldToday === '--' || oldToday !== newToday)) {
+        checkAndNotifyResultUpdate(record.market_name, newToday, record.draw_time, getTodayIsoDateStr());
+      }
     } else if (eventType === 'DELETE') {
       allMarkets = allMarkets.filter(m => String(m.id) !== String(record.id));
       showToast('⚡ Live: Market removed!', 'info');
     }
 
     // Re-render affected cards with updated sorting
+    updateKnownMarkets(allMarkets);
     applyFilterAndRender(true);
     updateActiveMarketsCount();
   });
@@ -247,6 +318,10 @@ async function loadMarketsData(showLoader = true) {
     }
 
     isLoading = false;
+
+    // Update notifications with current markets list
+    updateKnownMarkets(allMarkets);
+    updateAlertsBadge();
 
     // Apply search filter and force re-render
     await applyFilterAndRender(true);
@@ -459,6 +534,11 @@ async function applyFilterAndRender(force = false) {
     upcomingCountBadge.textContent = `${displayMarkets.length} Market${displayMarkets.length === 1 ? '' : 's'}`;
   }
 
+  // Check and trigger real-time notifications for newly declared results
+  if (selectedUserDateIso === getTodayIsoDateStr()) {
+    checkAndTriggerAnnouncements(allMarkets, dateResultsMap);
+  }
+
   // Render line-wise market cards in white (includes all markets)
   renderMarketCards(displayMarkets, dateResultsMap, prevDateResultsMap);
 
@@ -567,13 +647,18 @@ function renderMarketCards(markets, dateResultsMap, prevDateResultsMap) {
       <div class="absolute top-0 left-0 w-1.5 h-full ${stripColorClass}"></div>
 
       <div class="w-full pl-2 space-y-3">
-        <!-- Title row -->
-        <div class="flex items-center gap-2 flex-wrap">
-          <h2 class="${headerTextClass} truncate">
-            ${escapeHtml(market.market_name)}
-          </h2>
-          ${isYellow ? `<span class="px-1.5 py-0.5 text-[9px] uppercase font-black bg-amber-400 text-slate-950 rounded-md border border-amber-500 shadow-xs">★ Highlighted</span>` : ''}
-          ${market.status === 'Hidden' ? `<span class="px-2 py-0.5 text-[10px] uppercase font-extrabold bg-red-100 text-red-700 rounded-md">Hidden</span>` : ''}
+        <!-- Title row with Market Name & Direct Alert Toggle Button -->
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <div class="flex items-center gap-2 flex-wrap">
+            <h2 class="${headerTextClass} truncate">
+              ${escapeHtml(market.market_name)}
+            </h2>
+            ${isYellow ? `<span class="px-1.5 py-0.5 text-[9px] uppercase font-black bg-amber-400 text-slate-950 rounded-md border border-amber-500 shadow-xs">★ Highlighted</span>` : ''}
+            ${market.status === 'Hidden' ? `<span class="px-2 py-0.5 text-[10px] uppercase font-extrabold bg-red-100 text-red-700 rounded-md">Hidden</span>` : ''}
+          </div>
+          <div class="shrink-0">
+            ${getCardAlertButtonHtml(market.market_name)}
+          </div>
         </div>
 
         <!-- Row with Draw Time + Record Chart on Left, and Two Number Boxes on the Right -->
@@ -620,6 +705,11 @@ function renderMarketCards(markets, dateResultsMap, prevDateResultsMap) {
 
     container.appendChild(card);
   });
+
+  // Attach interactive alert toggle listeners to all card buttons
+  attachCardAlertListeners(container, () => {
+    applyFilterAndRender(true);
+  });
 }
 
 // Helper: Check if a market name corresponds to New Ghaziabad
@@ -629,12 +719,42 @@ export function isNewGhaziabadMarket(name) {
   return (n.includes('new') && (n.includes('gaziabad') || n.includes('ghaziabad')));
 }
 
+function setupNewGhaziabadAlertBtn() {
+  const btn = document.getElementById('home-ng-alert-btn');
+  if (btn && !btn.dataset.listenerAttached) {
+    btn.dataset.listenerAttached = 'true';
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      btn.disabled = true;
+      const res = await toggleMarketSubscription('New Ghaziabad');
+      showToast(res.message, res.success ? (res.subscribed ? 'success' : 'info') : 'error');
+      updateAlertsBadge();
+      applyFilterAndRender(true);
+      btn.disabled = false;
+    });
+  }
+}
+
 // Update the homepage dedicated New Ghaziabad result section dynamically from Supabase data
 function updateNewGhaziabadHomeWidget(dateResultsMap, prevDateResultsMap) {
   const todayBox = document.getElementById('home-ng-today-num');
   const yestBox = document.getElementById('home-ng-yesterday-num');
   const timeBadge = document.getElementById('home-ng-draw-time');
   const statusBadge = document.getElementById('home-ng-status-badge');
+  const alertBtn = document.getElementById('home-ng-alert-btn');
+  const alertBtnText = document.getElementById('home-ng-alert-btn-text');
+
+  // Update New Ghaziabad alert button state
+  if (alertBtn && alertBtnText) {
+    const isSub = isSubscribedToMarket('New Ghaziabad') || isSubscribedToMarket('New Gaziabad');
+    if (isSub) {
+      alertBtn.className = 'market-card-alert-btn inline-flex items-center gap-1 text-[11px] font-black uppercase bg-amber-400 hover:bg-amber-500 text-slate-950 px-2.5 py-1 rounded-lg border border-amber-500 shadow-2xs transition-colors cursor-pointer';
+      alertBtnText.textContent = 'Alert ON';
+    } else {
+      alertBtn.className = 'market-card-alert-btn inline-flex items-center gap-1 text-[11px] font-black uppercase bg-slate-900 hover:bg-slate-800 text-amber-300 px-2.5 py-1 rounded-lg border border-slate-700 shadow-2xs transition-colors cursor-pointer';
+      alertBtnText.textContent = 'Get Alert';
+    }
+  }
 
   if (!todayBox || !yestBox) return;
 

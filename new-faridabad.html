@@ -59,6 +59,15 @@
 
         <!-- Right: Links & Refresh -->
         <div class="flex items-center gap-1.5">
+          <button 
+            id="open-alerts-btn" 
+            title="Real-Time Result Alerts" 
+            aria-label="Real-Time Result Alerts"
+            class="relative inline-flex items-center gap-1 text-[11px] sm:text-xs font-black uppercase tracking-wider bg-amber-300 hover:bg-amber-200 text-slate-950 px-2.5 py-1.5 rounded-xl border border-amber-600/30 shadow-xs transition-colors cursor-pointer"
+          >
+            <span>🔔</span> <span class="hidden sm:inline">Alerts</span>
+            <span id="alerts-badge" class="hidden absolute -top-1.5 -right-1.5 bg-rose-600 text-white text-[10px] font-black rounded-full h-4 min-w-[16px] px-1 flex items-center justify-center border-2 border-white shadow-xs">0</span>
+          </button>
           <a href="/new-ghaziabad.html" class="inline-flex items-center gap-1 text-[11px] sm:text-xs font-black uppercase tracking-wider bg-slate-950 text-amber-300 hover:bg-slate-900 px-2.5 py-1.5 rounded-xl border border-slate-800 shadow-xs transition-colors">
             <span>🎯</span> <span class="hidden sm:inline">New Ghaziabad</span>
           </a>
@@ -84,6 +93,7 @@
     <!-- MAIN CONTAINER -->
     <main class="flex-1 max-w-5xl w-full mx-auto px-3 sm:px-4 pt-4 pb-10 space-y-4">
       
+
       <!-- HERO & VIEW CONTROLS CARD -->
       <section class="bg-slate-900/90 text-white rounded-2xl p-4 sm:p-5 shadow-2xl border border-slate-800 space-y-4 backdrop-blur-sm">
         
@@ -96,14 +106,15 @@
             <p id="page-draw-time" class="text-xs text-slate-400 font-semibold mt-0.5">Daily Draw Time: 07:15 PM</p>
           </div>
 
-          <!-- Mode / Market Switcher Dropdown -->
-          <div class="flex flex-wrap items-center gap-2">
+          <!-- Mode / Market Switcher Dropdown & Alert Opt-In -->
+          <div class="flex flex-wrap items-end gap-2">
             <div class="flex flex-col gap-1 w-full sm:w-auto">
               <label for="market-select" class="text-[11px] text-slate-400 font-black uppercase tracking-wider">Select Market:</label>
               <select id="market-select" class="bg-slate-950 text-amber-300 border border-slate-700 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer shadow-inner min-w-[220px]">
                 <option value="ALL">🌟 ALL MARKETS (Combined Matrix)</option>
               </select>
             </div>
+            <div id="chart-market-alert-container" class="shrink-0 pb-0.5"></div>
           </div>
         </div>
 
