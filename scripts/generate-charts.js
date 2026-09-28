@@ -15,64 +15,64 @@ export const MARKETS = [
     aliases: ['disawar'],
     name: 'Disawer',
     drawTime: '05:15 AM',
-    title: 'Disawer Chart 2026 – SATTA KING FAST',
-    desc: 'Check Disawer Chart today, SATTA KING FAST live record chart, monthly results, and previous results updated in real-time.'
+    title: 'Disawer Chart 2026 – NEW GAZIABAD',
+    desc: 'Check Disawer Chart today, NEW GAZIABAD live record chart, monthly results, and previous results updated in real-time.'
   },
   {
     slug: 'dehli-noon',
     aliases: ['delhi-noon'],
     name: 'Dehli Noon',
     drawTime: '03:15 PM',
-    title: 'Dehli Noon Chart 2026 – SATTA KING FAST',
-    desc: 'Check Dehli Noon Chart today, SATTA KING FAST live record chart, monthly results, and previous results updated in real-time.'
+    title: 'Dehli Noon Chart 2026 – NEW GAZIABAD',
+    desc: 'Check Dehli Noon Chart today, NEW GAZIABAD live record chart, monthly results, and previous results updated in real-time.'
   },
   {
     slug: 'punjab-day',
     aliases: [],
     name: 'Punjab Day',
     drawTime: '05:15 PM',
-    title: 'Punjab Day Chart 2026 – SATTA KING FAST',
-    desc: 'Check Punjab Day Chart today, SATTA KING FAST live record chart, monthly results, and previous results updated in real-time.'
+    title: 'Punjab Day Chart 2026 – NEW GAZIABAD',
+    desc: 'Check Punjab Day Chart today, NEW GAZIABAD live record chart, monthly results, and previous results updated in real-time.'
   },
   {
     slug: 'faridabad',
     aliases: [],
     name: 'Faridabad',
     drawTime: '06:15 PM',
-    title: 'Faridabad Chart 2026 – SATTA KING FAST',
-    desc: 'Check Faridabad Chart today, SATTA KING FAST live record chart, monthly results, and previous results updated in real-time.'
+    title: 'Faridabad Chart 2026 – NEW GAZIABAD',
+    desc: 'Check Faridabad Chart today, NEW GAZIABAD live record chart, monthly results, and previous results updated in real-time.'
   },
   {
     slug: 'new-faridabad',
     aliases: [],
     name: 'New Faridabad',
     drawTime: '07:15 PM',
-    title: 'New Faridabad Chart 2026 – SATTA KING FAST',
-    desc: 'Check New Faridabad Chart today, SATTA KING FAST live record chart, monthly results, and previous results updated in real-time.'
+    title: 'New Faridabad Chart 2026 – NEW GAZIABAD',
+    desc: 'Check New Faridabad Chart today, NEW GAZIABAD live record chart, monthly results, and previous results updated in real-time.'
   },
   {
     slug: 'gaziabad',
     aliases: ['ghaziabad'],
     name: 'Gaziabad',
     drawTime: '08:45 PM',
-    title: 'Gaziabad Chart 2026 – SATTA KING FAST',
-    desc: 'Check Gaziabad Chart today, SATTA KING FAST live record chart, monthly results, and previous results updated in real-time.'
+    title: 'Gaziabad Chart 2026 – NEW GAZIABAD',
+    desc: 'Check Gaziabad Chart today, NEW GAZIABAD live record chart, monthly results, and previous results updated in real-time.'
   },
   {
     slug: 'new-gaziabad',
     aliases: ['new-ghaziabad-chart'],
     name: 'New Gaziabad',
     drawTime: '09:30 PM',
-    title: 'New Gaziabad Chart 2026 – SATTA KING FAST',
-    desc: 'Check New Gaziabad Chart today, SATTA KING FAST live record chart, monthly results, and previous results updated in real-time.'
+    title: 'New Gaziabad Chart 2026 – NEW GAZIABAD',
+    desc: 'Check New Gaziabad Chart today, NEW GAZIABAD live record chart, monthly results, and previous results updated in real-time.'
   },
   {
     slug: 'gali',
     aliases: [],
     name: 'Gali',
     drawTime: '11:45 PM',
-    title: 'Gali Chart 2026 – SATTA KING FAST',
-    desc: 'Check Gali Chart today, SATTA KING FAST live record chart, monthly results, and previous results updated in real-time.'
+    title: 'Gali Chart 2026 – NEW GAZIABAD',
+    desc: 'Check Gali Chart today, NEW GAZIABAD live record chart, monthly results, and previous results updated in real-time.'
   }
 ];
 
@@ -92,7 +92,7 @@ function generateMarketPage(market, filename) {
   // Replace Canonical & OG
   content = content.replace(
     /<link rel="canonical" href=".*?" \/>/s,
-    `<link rel="canonical" href="https://sattakingfast.vercel.app/${market.slug}" />`
+    `<link rel="canonical" href="https://YOUR-DOMAIN.com/${market.slug}" />`
   );
   content = content.replace(
     /<meta property="og:title" content=".*?" \/>/s,
@@ -104,7 +104,7 @@ function generateMarketPage(market, filename) {
   );
   content = content.replace(
     /<meta property="og:url" content=".*?" \/>/s,
-    `<meta property="og:url" content="https://sattakingfast.vercel.app/${market.slug}" />`
+    `<meta property="og:url" content="https://YOUR-DOMAIN.com/${market.slug}" />`
   );
 
   // Replace headings
