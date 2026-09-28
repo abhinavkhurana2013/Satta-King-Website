@@ -905,19 +905,19 @@ function setupRefreshButton() {
 }
 
 const PAGE_TITLES = {
-  home: 'SATTA KING FAST',
-  about: 'About – SATTA KING FAST Live Market Results & Records Information',
-  contact: 'Contact Us – SATTA KING FAST Help & Support',
-  privacy: 'Privacy Policy – SATTA KING FAST',
-  terms: 'Terms & Conditions – SATTA KING FAST'
+  home: 'NEW GAZIABAD',
+  about: 'About – NEW GAZIABAD Live Market Results & Records Information',
+  contact: 'Contact Us – NEW GAZIABAD Help & Support',
+  privacy: 'Privacy Policy – NEW GAZIABAD',
+  terms: 'Terms & Conditions – NEW GAZIABAD'
 };
 
 const PAGE_DESCRIPTIONS = {
-  home: 'SATTA KING FAST - Live Satta King results, fast result charts, New Ghaziabad, Disawer, Faridabad, Gaziabad, Gali record charts updated in real-time.',
-  about: 'Learn about SATTA KING FAST, our live market results platform, historical chart data, and market draw timing schedules.',
-  contact: 'Get in touch with SATTA KING FAST for technical support, feedback, and general inquiries.',
-  privacy: 'Read the SATTA KING FAST Privacy Policy regarding user privacy, cookies, data collection, and security.',
-  terms: 'Read the SATTA KING FAST Terms & Conditions governing website usage, disclaimer, and guidelines.'
+  home: 'NEW GAZIABAD - Fast and accurate live Satta King results, daily lucky numbers, and complete monthly record charts for New Gaziabad and major markets.',
+  about: 'Learn about NEW GAZIABAD, our live market results platform, historical chart data, and market draw timing schedules.',
+  contact: 'Get in touch with NEW GAZIABAD for technical support, feedback, and general inquiries.',
+  privacy: 'Read the NEW GAZIABAD Privacy Policy regarding user privacy, cookies, data collection, and security.',
+  terms: 'Read the NEW GAZIABAD Terms & Conditions governing website usage, disclaimer, and guidelines.'
 };
 
 // Page Navigation & Contact Form

@@ -1,5 +1,5 @@
 /**
- * SATTA KING FAST - Notification UI & Preferences Modal
+ * NEW GAZIABAD - Notification UI & Preferences Modal
  */
 
 import {
@@ -692,7 +692,7 @@ export async function promptBrowserNotificationPermission() {
 
       // Dispatch welcome test alert so the user immediately sees it works
       await sendResultNotification({
-        marketName: 'SATTA KING FAST',
+        marketName: 'NEW GAZIABAD',
         resultNumber: 'LIVE',
         isTest: true
       });

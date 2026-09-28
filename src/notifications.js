@@ -1,5 +1,5 @@
 /**
- * SATTA KING FAST - Real-time Web Notification System
+ * NEW GAZIABAD - Real-time Web Notification System
  * Uses the Browser's Notification API for instant alerts when market results are published.
  */
 
@@ -408,8 +408,8 @@ export async function sendResultNotification({ marketName, resultNumber, drawTim
   }
 
   const title = isTest
-    ? `🔔 SATTA KING FAST: Test Alert`
-    : `👑 SATTA KING FAST: ${marketName} Result Out!`;
+    ? `🔔 NEW GAZIABAD: Test Alert`
+    : `👑 NEW GAZIABAD: ${marketName} Result Out!`;
 
   const body = isTest
     ? `Alerts are working perfectly! You will receive instant notifications when ${marketName} results are declared.`
